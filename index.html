@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="description" content="Интерактивная математическая модель представления половых признаков и предпочтений: бинарная анкета, несколько идеальных профилей и треугольник ориентаций." />
+  <title>Треугольник предпочтений · Интерактивная модель</title>
+  <link rel="stylesheet" href="./styles.css" />
+  <script type="module" src="./app.js"></script>
+</head>
+<body>
+<div class="page-shell">
+  <header class="topbar">
+    <a class="brand" href="#top" aria-label="К началу страницы"><span class="brand-symbol" aria-hidden="true">△</span><span>Треугольник <strong>предпочтений</strong></span></a>
+    <div class="header-actions">
+      <button type="button" class="button subtle" id="exportBtn">Экспорт JSON</button>
+      <button type="button" class="button subtle" id="importBtn">Импорт JSON</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden />
+      <button type="button" class="button quiet" id="resetBtn">Сбросить всё</button>
+    </div>
+  </header>
+  <main id="top">
+    <section class="hero">
+      <div class="eyebrow"><span class="live-dot" aria-hidden="true"></span> ИНТЕРАКТИВНАЯ АКСИОМАТИЧЕСКАЯ МОДЕЛЬ</div>
+      <h1>От бинарных признаков<br/><span>к треугольнику предпочтений.</span></h1>
+      <p class="hero-lead">Как определить положение объекта <strong>X</strong> на треугольнике предпочтений в рамках нашей модели:</p>
+      <ol class="quickstart">
+        <li><span class="step-number">01</span><span>В блоке <a href="#questions">05 «Бинарные вопросы»</a> ответьте на вопросы об <strong>объекте X</strong> (левая колонка).</span></li>
+        <li><span class="step-number">02</span><span>В блоке <a href="#preferences">04 «Векторы предпочтений»</a> добавьте один или несколько профилей <strong>Y</strong> — людей, к которым X мог бы испытывать влечение. При необходимости укажите относительный вес каждого профиля.</span></li>
+        <li><span class="step-number">03</span><span>По очереди выбирайте профиль Y в блоке 04 и отвечайте за него в <strong>правой колонке блока 05</strong>. Положение точки на треугольнике обновляется автоматически.</span></li>
+      </ol>
+      <p class="hero-after">Можно использовать готовые вопросы или создать собственную анкету с другими ответами и весами в блоках 03 и 06.</p>
+      <div class="hero-chips"><span>16 вопросов по умолчанию</span><span>Несколько профилей предпочтений</span><span>Наглядный результат</span><span>Данные остаются в браузере</span></div>
+    </section>
+
+
+    <section class="results-grid" aria-label="Результаты модели">
+      <div class="panel diagram-panel">
+        <div class="panel-title"><span class="section-index">01</span><div><h2>Треугольник ориентаций</h2><p>Расширенная модель · пересчёт в реальном времени</p></div></div>
+        <div class="triangle-wrap"><svg id="triangleSvg" viewBox="0 0 420 340" role="img" aria-labelledby="triangleTitle triangleDesc">
+          <title id="triangleTitle">Треугольник предпочтений</title><desc id="triangleDesc">Слева снизу гетеросоответствие, справа снизу гомосоответствие, сверху предпочтение двух противоположных полюсов.</desc>
+          <defs><linearGradient id="triangleFill" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#df9e65" stop-opacity=".17"/><stop offset=".52" stop-color="#8b8ae8" stop-opacity=".12"/><stop offset="1" stop-color="#4fd0b2" stop-opacity=".18"/></linearGradient></defs>
+          <polygon points="44,286 376,286 210,28" fill="url(#triangleFill)" stroke="#747c97" stroke-width="1.6" />
+          <path d="M210 28 L210 286" stroke="#9088c8" stroke-dasharray="5 7" opacity=".85"/>
+          <path d="M127 157 L293 157" stroke="#747c97" stroke-dasharray="3 7" opacity=".35"/>
+          <circle cx="210" cy="286" r="3.5" fill="#c8b4ff"/>
+          <text x="210" y="16" text-anchor="middle" class="svg-label">ОБА ПОЛЮСА</text>
+          <text x="44" y="309" text-anchor="start" class="svg-label">ГЕТЕРО</text>
+          <text x="376" y="309" text-anchor="end" class="svg-label">ГОМО</text>
+          <text x="210" y="327" text-anchor="middle" class="svg-foot">предпочтение околонулевых моделей ↓</text>
+          <circle id="positionGlow" cx="210" cy="28" r="16" fill="#82e2da" opacity=".15"/>
+          <circle id="positionDot" cx="210" cy="28" r="7" fill="#7de0d9" stroke="#0c1523" stroke-width="2"/>
+        </svg></div>
+        <p class="error-message" id="errorMessage" role="alert" hidden></p>
+        <div class="score-bars" aria-label="Координаты треугольника">
+          <div class="score-row"><span><i style="background:var(--hetero)"></i> Гетеросоответствие</span><strong id="heteroValue">—</strong><div class="track"><div class="fill hetero" id="heteroBar"></div></div></div>
+          <div class="score-row"><span><i style="background:var(--homo)"></i> Гомосоответствие</span><strong id="homoValue">—</strong><div class="track"><div class="fill homo" id="homoBar"></div></div></div>
+          <div class="score-row"><span><i style="background:var(--both)"></i> Оба полюса</span><strong id="bothValue">—</strong><div class="track"><div class="fill both" id="bothBar"></div></div></div>
+        </div>
+      </div>
+      <div class="panel analytics-panel">
+        <div class="panel-title"><span class="section-index">02</span><div><h2>Каким выглядит объект X?</h2><p>Соответствие женской и мужской моделям по выбранным признакам</p></div></div>
+        <div class="identity-overview" aria-live="polite">
+          <span class="mini-label">ПРОФИЛЬ ОБЪЕКТА X</span>
+          <div class="identity-summary"><strong id="identityLabel">—</strong><span id="identityNumber">I(x): —</span></div>
+          <p id="identityDescription">Положение определяется ответами об объекте X в блоке 05.</p>
+          <div id="identityMeter" class="identity-meter" role="meter" aria-label="Сходство с женской и мужской моделями" aria-valuemin="-1" aria-valuemax="1" aria-valuenow="0" aria-valuetext="Профиль не рассчитан">
+            <div class="identity-meter-track"><div class="identity-middle"></div><div id="identityMarker" class="identity-marker" style="left:50%"></div></div>
+            <div class="identity-meter-labels"><span>Женская модель</span><span>Мужская модель</span></div>
+          </div>
+        </div>
+        <div class="presets"><span class="mini-label">ПОСМОТРЕТЬ ПРИМЕРЫ ПРЕДПОЧТЕНИЙ</span><p class="preset-explanation">Кнопки заполняют примеры профилей Y, чтобы показать разницу между влечением к двум полюсам и к почти андрогинным людям.</p><div class="preset-actions">
+          <button type="button" class="button compact" data-preset="poles">Оба полюса</button><button type="button" class="button compact" data-preset="androgynous">Почти андрогинные</button><button type="button" class="button compact" data-preset="masculine">Маскулинный идеал</button><button type="button" class="button compact" data-preset="feminine">Фемининный идеал</button>
+        </div></div>
+      </div>
+    </section>
+
+    <section class="panel questionnaire-panel" aria-label="Выбор анкеты">
+      <div class="panel-title"><span class="section-index">03</span><div><h2>Анкета и пространство признаков</h2><p>Исходная расширенная анкета выбрана по умолчанию</p></div></div>
+      <div class="questionnaire-toolbar">
+        <label>Текущая анкета<select id="questionnaireSelect" aria-label="Выберите анкету"></select></label>
+        <button type="button" class="button" id="copyQuestionnaireBtn">Создать копию</button>
+        <button type="button" class="button" id="blankQuestionnaireBtn">Пустая анкета</button>
+        <button type="button" class="button" id="renameQuestionnaireBtn">Переименовать</button>
+        <button type="button" class="button danger" id="deleteQuestionnaireBtn">Удалить</button>
+      </div>
+      <p id="questionnaireStatus" class="helper" role="status"></p>
+    </section>
+
+    <section class="work-grid" aria-label="Редактор профилей">
+      <div class="panel profile-panel" id="preferences">
+        <div class="panel-title"><span class="section-index">04</span><div><h2>Векторы предпочтений объекта X</h2><p>Один вектор — один полный профиль объекта Y, который привлекает X</p></div></div>
+        <div id="profileList" class="profile-list"></div>
+        <button type="button" id="addProfileBtn" class="button add-button">＋ Добавить вектор предпочтений</button>
+        <p class="helper">Веса относительные: 20 и 40 означают те же пропорции, что 1 и 2. Нулевой вес исключает профиль.</p>
+      </div>
+      <div class="panel questions-panel" id="questions">
+        <div class="panel-title"><span class="section-index">05</span><div><h2>Бинарные вопросы</h2><p>Слева — объект X, справа — выбранный профиль Y</p></div></div>
+        <div class="vector-legend"><span><i class="legend-dot identity"></i> Объект X</span><span><i class="legend-dot ideal"></i> Привлекающий объект Y</span></div>
+        <div class="selected-profile-bar">Выбранный профиль Y: <strong id="currentProfileName">—</strong></div>
+        <div id="questionList" class="question-list" tabindex="0" role="region" aria-label="Список вопросов с внутренней прокруткой"></div>
+      </div>
+    </section>
+
+    <section class="panel editor-panel">
+      <div class="panel-title"><span class="section-index">06</span><div><h2>Конструктор анкеты</h2><p>Создавайте вопросы и задавайте собственные веса без изменения исходной анкеты</p></div></div>
+      <details id="traitEditor"><summary>Редактор вопросов <span>Формулировки, ответы, веса и группы</span></summary>
+        <div class="editor-help">Исходная анкета защищена от изменений: чтобы редактировать её, нажмите «Создать копию». Отключённый вопрос исключается из расчётов у всех профилей. Новые веса — гипотезы, не эмпирические коэффициенты. Увеличение числа коррелирующих вопросов не гарантирует роста точности.</div>
+        <div id="traitEditorRows" class="trait-editor-rows"></div>
+        <form id="addTraitForm" class="add-trait-form">
+          <h3>Добавить бинарный вопрос в свою анкету</h3>
+          <div class="form-fields"><label>Формулировка<input name="question" required maxlength="140" placeholder="Какой вариант ближе?"/></label><label>Фемининный ответ<input name="female" required maxlength="80" placeholder="Вариант A"/></label><label>Маскулинный ответ<input name="male" required maxlength="80" placeholder="Вариант B"/></label><label>Вес<input name="weight" type="number" min="0.05" max="20" step="0.05" value="0.5" required/></label></div>
+          <button type="submit" class="button primary">Добавить вопрос</button>
+        </form>
+      </details>
+    </section>
+  </main>
+  <footer class="site-footer">
+    <p><strong>Об исследовательской модели.</strong> Этот проект — экспериментальная математическая конструкция, а не научно подтверждённый метод определения сексуальной ориентации. Соответствие признаков моделям и их веса условны; бинарные вопросы не отражают всё разнообразие людей. Результаты не следует использовать для оценки реальной личности.</p>
+    <p>Подробное философское обоснование, определения и формулы приведены в <a href="./docs/model-v2-english-thesis.docx" download>математическом описании модели (Word, .docx)</a>. Анкеты и ответы сохраняются локально в вашем браузере.</p>
+  </footer>
+</div>
+</body>
+</html>
