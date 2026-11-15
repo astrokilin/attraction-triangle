@@ -31,7 +31,7 @@
         <li><span class="step-number">03</span><span>По очереди выбирайте партнера в блоке 04 и отвечайте за него в <strong>правой колонке блока 05</strong>. Положение точки на треугольнике обновляется автоматически.</span></li>
       </ol>
       <p class="hero-after">Можно использовать готовые вопросы или создать собственную анкету с другими ответами и весами в блоках 03 и 06.</p>
-      <div class="hero-chips"><span>16 вопросов по умолчанию</span><span>Несколько партнеров</span><span>Наглядный результат</span><span>Данные остаются в браузере</span></div>
+      <div class="hero-chips"><span>23 вопроса по умолчанию</span><span>Несколько партнеров</span><span>Наглядный результат</span><span>Данные остаются в браузере</span></div>
     </section>
 
 
@@ -51,8 +51,7 @@
           <text x="210" y="327" text-anchor="middle" class="svg-foot">предпочтение околонулевых моделей ↓</text>
           <circle id="positionGlow" cx="210" cy="28" r="16" fill="#82e2da" opacity=".15"/>
           <circle id="positionDot" cx="210" cy="28" r="7" fill="#7de0d9" stroke="#0c1523" stroke-width="2"/>
-        </svg></div>
-        <p class="error-message" id="errorMessage" role="alert" hidden></p>
+        </svg><p class="error-message" id="errorMessage" role="alert" hidden></p></div>
         <div class="score-bars" aria-label="Координаты треугольника">
           <div class="score-row"><span><i style="background:var(--hetero)"></i> Гетеросоответствие</span><strong id="heteroValue">—</strong><div class="track"><div class="fill hetero" id="heteroBar"></div></div></div>
           <div class="score-row"><span><i style="background:var(--homo)"></i> Гомосоответствие</span><strong id="homoValue">—</strong><div class="track"><div class="fill homo" id="homoBar"></div></div></div>
@@ -63,7 +62,7 @@
         <div class="panel-title"><span class="section-index">02</span><div><h2>Мои характеристики</h2><p>Соответствие женской и мужской моделям по выбранным признакам</p></div></div>
         <div class="identity-overview" aria-live="polite">
           <span class="mini-label">МОЙ ПРОФИЛЬ</span>
-          <div class="identity-summary"><strong id="identityLabel">—</strong><span id="identityNumber">Мой индекс: —</span></div>
+          <div class="identity-summary"><strong class="identity-label"><span id="identityLabel">—</span><span class="identity-size" aria-hidden="true">Преобладает женская модель</span></strong><span class="identity-number"><span id="identityNumber">Мой индекс: —</span><span class="identity-size" aria-hidden="true">Мой индекс: +1.00e-99</span></span></div>
           <div class="identity-description">
             <p id="identityDescription">Мой профиль определяется ответами о себе в блоке 05.</p>
             <p class="identity-description-space" aria-hidden="true">Едва заметное преобладание женской модели по выбранным вопросам. Это описание моих характеристик, а не моей ориентации.</p>
@@ -107,12 +106,15 @@
         <div class="panel-title"><span class="section-index">05</span><div><h2>Мои характеристики и выбранного партнера</h2><p>Слева — мои характеристики, справа — выбранного партнера</p></div></div>
         <div class="vector-legend"><span><i class="legend-dot identity"></i> Я</span><span><i class="legend-dot ideal"></i> Партнер</span></div>
         <div class="selected-profile-bar">Выбранный партнер: <strong id="currentProfileName">—</strong></div>
+        <p class="helper question-guidance">Выберите вариант, который лучше описывает вас или выбранного партнёра. Если ни один вариант не подходит полностью, выберите наиболее близкий. Вопросы о поведении отражают условные культурные модели, а не универсальные различия между людьми.</p>
+        <p id="migrationNotice" class="helper question-guidance" hidden>Сохранённая исходная анкета обновлена с 16 до 23 вопросов. Прежние ответы сохранены. Для всех профилей рост первоначально задан как «Выше среднего», новые ответы о поведении — по порядку 0,1,0,1,0,1. Это начальные значения, а не вывод из анатомии. Проверьте их для себя и каждого партнёра; результат после расширения может измениться.</p>
         <div id="questionList" class="question-list" tabindex="0" role="region" aria-label="Список вопросов с внутренней прокруткой"></div>
       </div>
     </section>
 
     <section class="panel editor-panel">
       <div class="panel-title"><span class="section-index">06</span><div><h2>Конструктор анкеты</h2><p>Создавайте вопросы и задавайте собственные веса без изменения исходной анкеты</p></div></div>
+      <p id="weightAxiomWarning" class="axiom-warning" role="status" hidden></p>
       <details id="traitEditor"><summary>Редактор вопросов <span>Формулировки, ответы, веса и группы</span></summary>
         <div class="editor-help">Исходная анкета защищена от изменений: чтобы редактировать её, нажмите «Создать копию». Отключённый вопрос исключается из расчётов у всех профилей. Новые веса — гипотезы, не эмпирические коэффициенты. Увеличение числа коррелирующих вопросов не гарантирует роста точности.</div>
         <div id="traitEditorRows" class="trait-editor-rows"></div>
@@ -126,7 +128,7 @@
   </main>
   <footer class="site-footer">
     <p><strong>Об исследовательской модели.</strong> Этот проект — экспериментальная математическая конструкция, а не научно подтверждённый метод определения сексуальной ориентации. Соответствие признаков моделям и их веса условны; бинарные вопросы не отражают всё разнообразие людей. Результаты не следует использовать для оценки реальной личности.</p>
-    <p>Подробное философское обоснование, определения и формулы приведены в <a href="./docs/model-v2-english-thesis.docx" download>математическом описании модели (Word, .docx)</a>. Анкеты и ответы сохраняются локально в вашем браузере.</p>
+    <p>Подробное философское обоснование, определения и формулы приведены в <a href="./docs/model-thesis.docx" download>математическом описании модели (Word, .docx)</a>. Анкеты и ответы сохраняются локально в вашем браузере.</p>
   </footer>
 </div>
 <dialog id="duplicatePartnerDialog" class="partner-dialog" aria-labelledby="duplicatePartnerTitle" aria-describedby="duplicatePartnerDescription">

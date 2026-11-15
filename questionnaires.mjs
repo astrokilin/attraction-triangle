@@ -5,6 +5,9 @@ const clone = x => structuredClone(x);
 const safeId = s => typeof s === 'string' && /^[A-Za-z0-9_-]{1,60}$/.test(s) && !['__proto__','prototype','constructor'].includes(s);
 const isAnswers = (a, traits) => a && typeof a === 'object' && !Array.isArray(a) && traits.every(t => Object.hasOwn(a,t.id) && (a[t.id] === 0 || a[t.id] === 1));
 
+export const LEGACY_DEFAULT_TRAIT_IDS = defaultTraits.slice(0,16).map(t=>t.id);
+export const MIGRATION_DEFAULT_ANSWERS = Object.freeze({height:1,romantic_initiative:0,flirting_style:1,courtship_role:0,physical_intimacy:1,sexual_initiative:0,sexual_dynamics:1});
+
 export function newWorkspace(traits) {
   return {
     own: allAnswers(traits, 1),
@@ -17,7 +20,7 @@ export function newWorkspace(traits) {
 }
 export function makeDefaultQuestionnaire() {
   const traits = clone(defaultTraits);
-  return { id: 'default', name: `Исходная расширенная (${traits.length} вопросов)`, builtin: true, traits, workspace: newWorkspace(traits) };
+  return { id: 'default', name: `Исходная расширенная (${traits.length} вопроса)`, builtin: true, revision:3, traits, workspace: newWorkspace(traits) };
 }
 export function newProject() {
   return { activeQuestionnaireId: 'default', questionnaires: [makeDefaultQuestionnaire()] };
@@ -29,7 +32,9 @@ export function makeQuestionnaire(source, id, name, blank = false) {
   if (!safeId(id) || id === 'default' || typeof name !== 'string' || !name.trim()) throw new Error('Неправильное имя или ID анкеты.');
   const traits = blank ? [] : clone(source.traits);
   const workspace = blank ? newWorkspace([]) : clone(source.workspace);
-  return {id, name:name.trim().slice(0,80), builtin:false, traits, workspace};
+  return {id, name:name.trim().slice(0,80), builtin:false, traits, workspace,
+    ...(Object.hasOwn(source,'behaviorContribution')?{behaviorContribution:source.behaviorContribution}:{}),
+    ...(!blank&&source.migratedFrom===16?{migratedFrom:16}:{})};
 }
 export function fillMissingAnswers(questionnaire) {
   const {traits,workspace} = questionnaire;
@@ -46,6 +51,7 @@ export function validateProject(project) {
     if (q.id === 'default' && !q.builtin) throw new Error('Исходная анкета должна оставаться встроенной.');
     if (q.id !== 'default' && q.builtin) throw new Error('Нельзя создать другую встроенную анкету.');
     qids.add(q.id);
+    if (Object.hasOwn(q,'behaviorContribution') && (!Number.isFinite(q.behaviorContribution) || q.behaviorContribution<0 || q.behaviorContribution>1)) throw new Error('Вклад поведения должен быть числом от 0 до 1.');
     if (!Array.isArray(q.traits) || q.traits.length > 64) throw new Error('Слишком много вопросов.');
     const tids = new Set();
     for (const t of q.traits) {
@@ -71,16 +77,23 @@ export function importProject(raw) {
   if (raw?.format !== 'representation-triangle-ru-v3') throw new Error('Неизвестный формат файла. Требуется экспорт V3.');
   validateProject(raw.project);
   const project = clone(raw.project);
-  // Builtin questionnaire is immutable across imported copies; preserve its answers if compatible.
+  // Only the builtin is upgraded. Copies and completely custom questionnaires remain intact.
   const original = project.questionnaires.find(q=>q.id==='default');
   const builtin = makeDefaultQuestionnaire();
-  if (original && original.traits.length===builtin.traits.length && builtin.traits.every((t,i)=>t.id===original.traits[i].id)) {
-    builtin.workspace = original.workspace;
-  }
+  const ids=new Set(original.traits.map(t=>t.id));
+  const legacy=original.traits.length===16&&LEGACY_DEFAULT_TRAIT_IDS.every(id=>ids.has(id));
+  const current=original.traits.length===builtin.traits.length&&builtin.traits.every(t=>ids.has(t.id));
+  if(!legacy&&!current)throw new Error('Неизвестный состав исходной анкеты: ожидаются исходные 16 или 23 признака. Пользовательские анкеты должны иметь собственный ID.');
+  builtin.workspace=original.workspace;
+  // Legacy group share is intentionally not used by the unified-weight model.
+  if(legacy){
+    for(const answers of [builtin.workspace.own,...builtin.workspace.ideals.map(p=>p.answers)])Object.assign(answers,MIGRATION_DEFAULT_ANSWERS);
+    builtin.migratedFrom=16;
+  } else if(original.migratedFrom===16)builtin.migratedFrom=16;
   project.questionnaires = [builtin,...project.questionnaires.filter(q=>q.id!=='default')];
   for (const q of project.questionnaires) {
     // Rename only the original generated defaults, preserving custom partner names.
-    for (const p of q.workspace.ideals) {
+    for (const p of q.builtin?q.workspace.ideals:[]) {
       if (p.id === 'ideal_female' && p.name === 'Фемининный полюс') p.name = 'Партнер 1';
       if (p.id === 'ideal_male' && p.name === 'Маскулинный полюс') p.name = 'Партнер 2';
     }

@@ -11,7 +11,7 @@ def inline_html():
     html=(root/'index.html').read_text()
     html=html.replace('<link rel="stylesheet" href="./styles.css" />',f'<style>{(root/"styles.css").read_text()}</style>')
     sections=[]
-    for f in ['traits.mjs','model.mjs','questionnaires.mjs','app.js']:
+    for f in ['traits.mjs','weight_validation.mjs','model.mjs','questionnaires.mjs','app.js']:
         s=(root/f).read_text()
         s=re.sub(r'^import .*?;\s*$', '', s, flags=re.MULTILINE)
         s=re.sub(r'\bexport (const|function)\b',r'\1',s)
@@ -29,6 +29,84 @@ def load_app(page):
 
 def scroll_positions(page):
     return page.evaluate('({page:window.scrollY,list:document.getElementById("questionList").scrollTop})')
+
+def check_weight_validation(page):
+    behavior=page.locator('.behavior-group')
+    assert behavior.locator('h3').text_content()=='Романтическое и сексуальное поведение'
+    assert behavior.locator('.question').count()==6
+    assert not page.locator('#weightAxiomWarning').is_visible()
+    assert page.locator('#groupSettings').count()==0
+    assert 'Если ни один вариант не подходит полностью' in page.locator('.question-guidance').first.inner_text()
+    page.once('dialog',lambda d:d.accept('Мои веса'))
+    page.locator('#copyQuestionnaireBtn').click()
+    assert not page.locator('#weightAxiomWarning').is_visible()
+    weight=page.locator('[data-edit-id="height"][data-edit-field="weight"]')
+    assert weight.input_value()=='0.85'
+    weight.fill('0.8');weight.dispatch_event('change')
+    assert page.locator('#weightAxiomWarning').is_visible()
+    assert 'I = 0' in page.locator('#weightAxiomWarning').inner_text()
+    assert page.evaluate('current().traits.find(t=>t.id==="height").weight')==0.8
+    assert page.evaluate('project.questionnaires[0].traits.find(t=>t.id==="height").weight')==0.85
+    page.reload()
+    assert page.locator('#weightAxiomWarning').is_visible()
+    assert page.evaluate('current().traits.find(t=>t.id==="height").weight')==0.8
+    page.locator('#traitEditor summary').click()
+    weight=page.locator('[data-edit-id="height"][data-edit-field="weight"]')
+    weight.fill('0.85');weight.dispatch_event('change')
+    assert not page.locator('#weightAxiomWarning').is_visible()
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.reload()
+
+def check_saved_migration(page):
+    legacy=json.loads((root/'tests/fixtures/legacy-v3.json').read_text())
+    page.evaluate('(raw)=>localStorage.setItem("representation-triangle-ru-v3",JSON.stringify(raw))',legacy)
+    page.reload()
+    assert page.locator('.question').count()==23
+    assert page.locator('#migrationNotice').is_visible()
+    old=legacy['project']['questionnaires'][0]['workspace']
+    current=page.evaluate('workspace()')
+    assert all(current['own'][key]==value for key,value in old['own'].items())
+    assert current['selected']==old['selected']
+    assert current['own']['height']==1
+    assert [current['own'][key] for key in ['romantic_initiative','flirting_style','courtship_role','physical_intimacy','sexual_initiative','sexual_dynamics']]==[0,1,0,1,0,1]
+    assert page.evaluate('JSON.parse(localStorage.getItem("representation-triangle-ru-v3")).project.questionnaires[0].traits.length')==23, 'successful migration must be persisted'
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.reload()
+
+def check_zero_identity_scrolling(page):
+    # Custom questionnaire with weights [1,1] can produce I=0.
+    for role in ['own','ideal']:
+        fixture=page.evaluate('''(role)=>{
+          const p=newProject(),q=makeQuestionnaire(activeQuestionnaire(p),'two_traits','Два одинаковых веса',true);
+          q.traits=[0,1].map(i=>({id:`trait_${i}`,question:`Вопрос ${i}`,female:'A',male:'B',group:groupOrder[0],weight:1,enabled:true,note:''}));
+          fillMissingAnswers(q);
+          const balanced={trait_0:1,trait_1:0},valid={trait_0:1,trait_1:1};
+          q.workspace.own=role==='own'?balanced:valid;
+          q.workspace.ideals=[{id:'balanced_partner',name:'Партнер',answers:role==='ideal'?balanced:valid,weight:50}];
+          q.workspace.selected='balanced_partner';
+          p.questionnaires.push(q);p.activeQuestionnaireId=q.id;
+          return {format:'representation-triangle-ru-v3',project:p};
+        }''',role)
+        page.locator('#importFile').set_input_files({'name':'zero-check.json','mimeType':'application/json','buffer':json.dumps(fixture).encode()})
+        assert page.locator('#weightAxiomWarning').is_visible()
+        assert page.locator('#errorMessage').is_visible()
+        assert 'I = 0' in page.locator('#errorMessage').inner_text()
+        radio=page.locator(f'input[data-role="{role}"][data-trait="trait_1"][value="1"]')
+        radio.locator('..').scroll_into_view_if_needed()
+        page.wait_for_timeout(150)
+        before=scroll_positions(page)
+        radio.locator('..').click()
+        assert not page.locator('#errorMessage').is_visible()
+        assert page.locator('#weightAxiomWarning').is_visible()
+        assert scroll_positions(page)==before
+        page.locator(f'input[data-role="{role}"][data-trait="trait_1"][value="0"]').locator('..').click()
+        assert page.locator('#errorMessage').is_visible()
+        assert scroll_positions(page)==before
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.reload()
 
 def create_partner_copy(page):
     count=page.locator('.profile-card').count()
@@ -205,17 +283,7 @@ def check_partner_presets(page):
         elif preset=='androgynous':
             assert 0<abs(result['mu'])<0.1
             assert result['both']==0, 'a single androgynous partner must remain one representation'
-            closest=page.evaluate('''()=>{
-              const active=current().traits.filter(t=>t.enabled&&t.weight>0);
-              const total=active.reduce((s,t)=>s+t.weight,0);
-              let best=Infinity;
-              for(let mask=0;mask<2**active.length;mask++){
-                const sum=active.reduce((s,t,i)=>s+t.weight*((mask>>i&1)?1:-1),0);
-                if(Math.abs(sum/total)>1e-9)best=Math.min(best,Math.abs(sum/total));
-              }
-              return best;
-            }''')
-            assert abs(abs(result['mu'])-closest)<1e-10, 'androgynous example must use the nearest nonzero score'
+            assert abs(abs(result['mu'])-1/421)<1e-10, 'default nearest nonzero score is independently proven in weight_validation.test.mjs'
         else:
             assert added[0]['weight']==added[1]['weight']>0
             assert [p['identity'] for p in result['evaluated']]==[-1,1]
@@ -319,13 +387,16 @@ with sync_playwright() as p:
     errors=[]
     page.on('pageerror',lambda exc:errors.append(str(exc)))
     load_app(page)
+    check_saved_migration(page)
+    check_weight_validation(page)
+    check_zero_identity_scrolling(page)
     check_duplicate_partners(page)
     check_partner_presets(page)
     check_custom_presets(page)
     check_partner_weights(page)
     assert page.locator('html').get_attribute('lang')=='ru'
-    assert page.locator('#questionnaireStatus').inner_text().startswith('16 вопросов')
-    assert page.locator('.question').count()==16
+    assert page.locator('#questionnaireStatus').inner_text().startswith('23 вопроса')
+    assert page.locator('.question').count()==23
     assert page.locator('#bothValue').inner_text()=='100.0%'
     assert page.locator('.topbar').get_by_text('Документ Word').count()==0
     assert page.locator('.hero .quickstart li').count()==3
@@ -380,12 +451,12 @@ with sync_playwright() as p:
     page.locator('[name="female"]').fill('Вариант А')
     page.locator('[name="male"]').fill('Вариант Б')
     page.locator('#addTraitForm button[type="submit"]').click()
-    assert page.locator('.question').count()==17
-    assert page.locator('#questionnaireStatus').inner_text().startswith('17 вопросов')
+    assert page.locator('.question').count()==24
+    assert page.locator('#questionnaireStatus').inner_text().startswith('24 вопроса')
     page.locator('#questionnaireSelect').select_option('default')
-    assert page.locator('.question').count()==16
+    assert page.locator('.question').count()==23
     page.locator('#questionnaireSelect').select_option(label='Моя анкетка')
-    assert page.locator('.question').count()==17
+    assert page.locator('.question').count()==24
     page.once('dialog',lambda d:d.accept('Пустая'))
     page.locator('#blankQuestionnaireBtn').click()
     assert page.locator('.question').count()==0
@@ -414,6 +485,8 @@ with sync_playwright() as p:
     assert not errors,errors
     phone=browser.new_page(viewport={'width':390,'height':844},device_scale_factor=1)
     load_app(phone)
+    check_weight_validation(phone)
+    check_zero_identity_scrolling(phone)
     check_duplicate_partners(phone)
     check_partner_presets(phone)
     check_partner_weights(phone)
@@ -421,6 +494,6 @@ with sync_playwright() as p:
     phone.screenshot(path=str(artifacts/'mobile.png'),full_page=True)
     assert phone.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 2'), 'horizontal overflow on mobile'
     assert not errors,errors
-    print('BROWSER SMOKE PASS: duplicate selection/cancel/edit, invariant triangle, unique weight controls, all saved duplicate records preserved through localStorage/JSON, preset switching, scrolling, responsive layouts')
+    print('BROWSER SMOKE PASS: 23 questions, behavior block and unified weight validation, editable height/trait weights, legacy migration, duplicate invariance, localStorage/JSON, preset switching, scrolling, desktop/mobile layouts')
     print(f'Browser artifacts: {artifacts}')
     browser.close()

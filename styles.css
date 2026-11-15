@@ -43,7 +43,8 @@ a { color: var(--aqua); }
 .section-index { display:grid; place-items:center; width:33px; height:33px; border-radius:10px; background:#1c343b; border:1px solid #2c5158; color:var(--aqua); font-weight:750; font-size:12px; flex-shrink:0; }
 .panel-title h2 { font-size:17px; letter-spacing:-.025em; margin:0 0 2px; }
 .panel-title p { margin:0; color:var(--muted); font-size:11px; }
-.triangle-wrap { max-width:440px; margin:0 auto 7px; }
+.triangle-wrap { position:relative;max-width:440px; margin:0 auto 7px; }
+.triangle-wrap .error-message {position:absolute;top:50%;left:12px;right:12px;transform:translateY(-50%);max-height:calc(100% - 32px);overflow:auto;overscroll-behavior:contain;margin:0;}
 .triangle-wrap svg { width:100%; height:auto; overflow:visible; display:block; }
 .svg-label { fill:#c8d0df; font-family:inherit; font-weight:750; font-size:12px; letter-spacing:.07em; }
 .svg-foot { fill:#8697af; font-family:inherit; font-size:10px; }
@@ -101,6 +102,9 @@ a { color: var(--aqua); }
 .legend-dot {display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;}.legend-dot.identity{background:#a3aed7;}.legend-dot.ideal{background:var(--aqua);}
 .selected-profile-bar { background:#1a3035;border:1px solid #2b5558;color:#c9e1e3;border-radius:9px;padding:9px 12px;font-size:11px;margin-bottom:16px; }
 .question-group { margin-bottom:19px; }
+.question-group.behavior-group {border-left:2px solid var(--aqua);padding:10px 0 0 12px;background:#173c401a;}
+.behavior-group .behavior-note {margin-bottom:12px;}
+.question-guidance {margin:0 0 14px;}
 .question-group h3 { margin:0 0 11px; font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:#9baeca;display:flex;align-items:center; gap:9px; }
 .question-group h3:after {content:"";height:1px;background:var(--line);flex:1;}
 .question { padding:10px 0 13px; border-bottom:1px solid #273447; }
@@ -181,6 +185,10 @@ footer {padding:21px 0 30px;color:#8292a6;font-size:10px;text-align:center;borde
 .identity-summary {display:flex;justify-content:space-between;align-items:center;gap:9px;flex-wrap:wrap;margin-top:11px;}
 .identity-summary strong {font-size:20px;line-height:1.25;letter-spacing:-.025em;}
 .identity-summary span {font-size:12px;font-variant-numeric:tabular-nums;color:var(--aqua);}
+.identity-summary .identity-label,.identity-summary .identity-number {display:grid;}
+.identity-summary .identity-label > span {grid-area:1 / 1;font:inherit;color:inherit;}
+.identity-summary .identity-number > span {grid-area:1 / 1;}
+.identity-size {visibility:hidden;}
 .identity-overview p {font-size:12px;line-height:1.65;color:#bac9d9;margin:12px 0 16px;}
 /* Reserve description space so live text changes do not shift the questionnaire below. */
 .identity-description {display:grid;}
@@ -210,3 +218,7 @@ footer {padding:21px 0 30px;color:#8292a6;font-size:10px;text-align:center;borde
 .analytics-panel { align-self: start; }
 .site-footer { text-align: center; }
 .site-footer p { margin: 0 auto 12px; max-width: 900px; }
+
+/* Non-invasive warning for weights that do not guarantee the A0 axiom. */
+.axiom-warning { padding:12px 16px;margin:0 0 14px;border:1px solid #a16c41;border-radius:10px;background:#40301f;color:#ffe1b5;font-size:12px;line-height:1.55; }
+.axiom-warning[hidden] {display:none;}

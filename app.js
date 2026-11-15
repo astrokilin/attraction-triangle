@@ -1,34 +1,38 @@
-import { groupOrder } from './traits.mjs';
+import { groupOrder, BEHAVIOR_GROUP } from './traits.mjs';
 import { evaluateIdentity, evaluateTriangle, allAnswers, nearestToZero, partnerVectorKey, uniquePartnerProfiles } from './model.mjs';
+import { validateNonzeroIdentity } from './weight_validation.mjs';
 import { newProject, makeQuestionnaire, activeQuestionnaire, fillMissingAnswers, importProject } from './questionnaires.mjs';
 
 const $ = id => document.getElementById(id);
 const clone = value => structuredClone(value);
 const uid = () => `item_${Math.random().toString(36).slice(2, 12)}`;
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' })[ch]);
-const fixed = value => (value >= 0 ? '+' : '') + value.toFixed(3);
+const fixed = value => (value >= 0 ? '+' : '') + (value!==0&&Math.abs(value)<.0005?value.toExponential(2):value.toFixed(3));
 const plain = value => value.toFixed(3);
 const percent = value => `${(value*100).toFixed(1)}%`;
+const questionCount = count => `${count} ${{one:'вопрос',few:'вопроса',many:'вопросов',other:'вопроса'}[new Intl.PluralRules('ru').select(count)]}`;
 const STORAGE_KEY='representation-triangle-ru-v3';
 
 let project = newProject();
+let loadedProject=false;
 try {
   const saved=localStorage.getItem(STORAGE_KEY);
-  if (saved) project=importProject(JSON.parse(saved));
+  if (saved) {project=importProject(JSON.parse(saved));loadedProject=true;}
 } catch(err) { console.warn('Локальный проект недоступен: ',err); }
 const current = () => activeQuestionnaire(project);
 const workspace = () => current().workspace;
 const selectedIdeal = () => workspace().ideals.find(p=>p.id===workspace().selected) || workspace().ideals[0];
 function persist() { try { localStorage.setItem(STORAGE_KEY, JSON.stringify({format:'representation-triangle-ru-v3',project})); } catch(err) { console.warn('Не удалось сохранить состояние: ',err); } }
-function change() { renderAll(); persist(); }
+function change(options) { renderAll(options); persist(); }
 
 function renderQuestionnaireSelect() {
   const select=$('questionnaireSelect');
   select.innerHTML=project.questionnaires.map(q=>`<option value="${escapeHtml(q.id)}" ${q.id===project.activeQuestionnaireId?'selected':''}>${escapeHtml(q.name)}</option>`).join('');
   const q=current();
-  $('questionnaireStatus').textContent = `${q.traits.length} вопросов, ${q.traits.filter(t=>t.enabled).length} активных · ${q.builtin?'Исходная анкета: только чтение. Для изменений создайте копию.':'Пользовательская анкета: вопросы и веса можно редактировать. Автосохранение в этом браузере.'}`;
+  $('questionnaireStatus').textContent = `${questionCount(q.traits.length)}, ${q.traits.filter(t=>t.enabled).length} активных · ${q.builtin?'Вопросы исходной анкеты: только чтение. Для изменения вопросов и их весов создайте копию.':'Пользовательская анкета: вопросы и веса можно редактировать. Автосохранение в этом браузере.'}`;
   $('renameQuestionnaireBtn').disabled=q.builtin;
   $('deleteQuestionnaireBtn').disabled=q.builtin;
+  $('migrationNotice').hidden=q.migratedFrom!==16;
   document.querySelectorAll('button[data-preset]').forEach(btn=>{
     btn.disabled=!q.traits.some(t=>t.enabled && t.weight>0);
     btn.title=btn.disabled?'Добавьте или включите хотя бы один вопрос в анкете.':'';
@@ -42,7 +46,7 @@ function renderProfiles() {
     return `<article class="profile-card ${p.id===w.selected?'selected':''}">
       <div class="profile-top"><button type="button" class="profile-select" data-action="select" data-id="${escapeHtml(p.id)}" title="Редактировать характеристики партнера">${escapeHtml(p.name)}</button>
       <button type="button" class="icon-btn" data-action="remove" data-id="${escapeHtml(p.id)}" aria-label="Удалить ${escapeHtml(p.name)}" ${w.ideals.length===1?'disabled':''}>×</button></div>
-      <div class="profile-sub">${score.ok?`Профиль партнера: ${fixed(score.value)}`:'Профиль партнера не определён (нарушение правила модели)'}</div>
+      <div class="profile-sub" ${score.ok?'':`title="${escapeHtml(score.reason)}"`}>${score.ok?`Профиль партнера: ${fixed(score.value)}`:'Профиль партнера: —'}</div>
       <div class="profile-actions"><button type="button" class="text-btn" data-action="rename" data-id="${escapeHtml(p.id)}">Переименовать</button><button type="button" class="text-btn" data-action="duplicate" data-id="${escapeHtml(p.id)}">Копировать</button></div>
     </article>`;
   }).join('');
@@ -72,7 +76,7 @@ function renderQuestions() {
   const groups=groupOrder.filter(group=>active.some(t=>t.group===group));
   $('questionList').innerHTML=groups.map(group=>{
     const items=active.filter(t=>t.group===group);
-    return `<section class="question-group"><h3>${escapeHtml(group)}</h3>${items.map(t=>{
+    return `<section class="question-group ${group===BEHAVIOR_GROUP?'behavior-group':''}"><h3>${escapeHtml(group)}</h3>${group===BEHAVIOR_GROUP?'<p class="helper behavior-note">Условные культурные модели; не определяют гендерную идентичность или ориентацию человека.</p>':''}${items.map(t=>{
       const fields=(role,answers)=>`<div class="answer-group ${role==='ideal'?'ideal':''}"><span class="mini-header">${role==='own'?'Я':'ПАРТНЕР'}</span><div class="pair">${[0,1].map(value=>`<label class="choice"><input type="radio" name="q_${role}_${escapeHtml(t.id)}" data-trait="${escapeHtml(t.id)}" data-role="${role}" value="${value}" ${answers[t.id]===value?'checked':''}/><span>${escapeHtml(value===0?t.female:t.male)}</span></label>`).join('')}</div></div>`;
       return `<div class="question"><div class="question-head"><strong>${escapeHtml(t.question)}</strong><small title="${escapeHtml(t.note)}">вес ${Number(t.weight).toFixed(2)} ⓘ</small></div><div class="answer-grid">${fields('own',w.own)}${fields('ideal',ideal.answers)}</div></div>`;
     }).join('')}</section>`;
@@ -127,8 +131,18 @@ function paintResult(result) {
   for(const dot of [$('positionDot'),$('positionGlow')]){dot.setAttribute('cx',x.toFixed(4));dot.setAttribute('cy',y.toFixed(4));}
   $('triangleDesc').textContent=`Гетеросоответствие ${percent(result.hetero)}, гомосоответствие ${percent(result.homo)}, оба полюса ${percent(result.both)}.`;
 }
+function renderWeightWarning(){
+  const box=$('weightAxiomWarning');
+  const validation=validateNonzeroIdentity(current().traits);
+  box.hidden=validation.status==='valid';
+  box.textContent=validation.status==='invalid'
+    ?'⚠ Нарушена аксиома I ≠ 0: при выбранных весах существует комбинация ответов, дающая I = 0. Веса не изменены. Настройте их вручную, если хотите обеспечить выполнение аксиомы для всех возможных профилей.'
+    :validation.status==='unknown'
+      ?`⚠ Проверка аксиомы I ≠ 0 не завершена: ${validation.reason} Веса сохранены без изменений.`
+      :validation.status==='empty'?'⚠ Нет активных вопросов с положительными весами. Индекс I не определён.':'';
+}
 function updateDashboard(){paintResult(evaluateTriangle(workspace().own,workspace().ideals,current().traits));}
-function renderAll(){renderQuestionnaireSelect();renderProfiles();renderQuestions();renderTraitEditor();updateDashboard();}
+function renderAll({preserveTraitEditor=false}={}){renderQuestionnaireSelect();renderProfiles();renderQuestions();if(!preserveTraitEditor)renderTraitEditor();renderWeightWarning();updateDashboard();}
 
 $('questionnaireSelect').addEventListener('change',event=>{project.activeQuestionnaireId=event.target.value;change();});
 function addQuestionnaire(blank) {
@@ -225,8 +239,9 @@ $('traitEditorRows').addEventListener('change',event=>{
   if(field==='enabled')t.enabled=input.checked;
   else if(field==='weight') {const v=Number(input.value);if(!Number.isFinite(v)||v<.05||v>20){alert('Вес должен быть от 0.05 до 20.');return renderTraitEditor();}t.weight=v;}
   else if(field==='group'){if(!groupOrder.includes(input.value))return;t.group=input.value;}
-  else if(['question','female','male'].includes(field)){const value=input.value.trim();if(!value){alert('Текст ответа или вопроса не должен быть пустым.');return renderTraitEditor();}t[field]=value.slice(0,field==='question'?140:80);}
-  change();
+  else if(['question','female','male'].includes(field)){const value=input.value.trim();if(!value){alert('Текст ответа или вопроса не должен быть пустым.');return renderTraitEditor();}t[field]=value.slice(0,field==='question'?140:80);input.value=t[field];}
+  // The edited controls already contain the new values. Keep their DOM for native Tab/focus.
+  change({preserveTraitEditor:true});
 });
 $('traitEditorRows').addEventListener('click',event=>{
   const btn=event.target.closest('button[data-remove-trait]');if(!btn||current().builtin)return;
@@ -259,3 +274,4 @@ $('resetBtn').addEventListener('click',()=>{
   project=newProject();change();
 });
 renderAll();
+if(loadedProject)persist();
