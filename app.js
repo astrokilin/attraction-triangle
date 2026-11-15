@@ -29,6 +29,10 @@ function renderQuestionnaireSelect() {
   $('questionnaireStatus').textContent = `${q.traits.length} вопросов, ${q.traits.filter(t=>t.enabled).length} активных · ${q.builtin?'Исходная анкета: только чтение. Для изменений создайте копию.':'Пользовательская анкета: вопросы и веса можно редактировать. Автосохранение в этом браузере.'}`;
   $('renameQuestionnaireBtn').disabled=q.builtin;
   $('deleteQuestionnaireBtn').disabled=q.builtin;
+  document.querySelectorAll('button[data-preset]').forEach(btn=>{
+    btn.disabled=!q.traits.some(t=>t.enabled && t.weight>0);
+    btn.title=btn.disabled?'Добавьте или включите хотя бы один вопрос в анкете.':'';
+  });
 }
 function renderProfiles() {
   const w=workspace();
@@ -160,22 +164,33 @@ $('profileList').addEventListener('click',event=>{
   if(btn.dataset.action==='rename'){const name=prompt('Имя партнера',p.name);if(name!==null&&name.trim())p.name=name.trim().slice(0,80);}
   renderProfiles();renderQuestions();updateDashboard();persist();
 });
+function defaultPartnerWeight() {
+  const w=workspace();
+  const sharedWeight=w.ideals[0].weight;
+  return sharedWeight>0&&w.ideals.every(p=>p.weight===sharedWeight)?sharedWeight:50;
+}
 $('addProfileBtn').addEventListener('click',()=>{
   const w=workspace();if(w.ideals.length>=30)return alert('Не более 30 партнеров.');
-  const sharedWeight=w.ideals[0].weight;
-  const weight=sharedWeight>0&&w.ideals.every(p=>p.weight===sharedWeight)?sharedWeight:50;
+  const weight=defaultPartnerWeight();
   const previous=selectedIdeal();const p={id:uid(),name:`Партнер ${w.ideals.length+1}`,answers:clone(previous?.answers??w.own),weight};
   w.ideals.push(p);w.selected=p.id;change();
 });
 function applyPreset(name) {
   const q=current(),w=workspace(),traits=q.traits;
-  const fem=()=>allAnswers(traits,0),masc=()=>allAnswers(traits,1);
-  const add=(label,answers,weight=50)=>({id:uid(),name:label,answers,weight});
-  if(name==='poles')w.ideals=[add('Партнер 1',fem()),add('Партнер 2',masc())];
-  if(name==='androgynous')w.ideals=[add('Партнер 1',nearestToZero(traits,-1)),add('Партнер 2',nearestToZero(traits,1))];
-  if(name==='masculine')w.ideals=[add('Партнер 1',masc(),100)];
-  if(name==='feminine')w.ideals=[add('Партнер 1',fem(),100)];
-  w.selected=w.ideals[0].id;change();
+  const presets={
+    feminine:()=>[allAnswers(traits,0)],
+    masculine:()=>[allAnswers(traits,1)],
+    androgynous:()=>[nearestToZero(traits,1)],
+    poles:()=>[allAnswers(traits,0),allAnswers(traits,1)]
+  };
+  if(!Object.hasOwn(presets,name)||!traits.some(t=>t.enabled && t.weight>0))return;
+  const count=name==='poles'?2:1;
+  if(w.ideals.length+count>30)return alert('Не более 30 партнеров.');
+  const weight=defaultPartnerWeight();
+  const partners=presets[name]().map((answers,i)=>({id:uid(),name:`Партнер ${w.ideals.length+i+1}`,answers,weight}));
+  w.ideals.push(...partners);w.selected=partners[0].id;
+  // Keep the preset button and its focus intact; selecting a partner does not navigate.
+  renderProfiles();renderQuestions();updateDashboard();persist();
 }
 document.querySelectorAll('button[data-preset]').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));
 $('traitEditorRows').addEventListener('change',event=>{

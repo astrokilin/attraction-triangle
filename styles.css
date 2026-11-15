@@ -67,7 +67,7 @@ a { color: var(--aqua); }
 .formula-card { border:1px solid var(--line); border-radius:11px; padding:14px 16px; }
 .formula { line-height:1.9; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; margin:8px 0; color:#e3e8ff; }
 .formula-card p, .helper { color:var(--muted); font-size:11px; line-height:1.6; margin:6px 0 0; }
-.presets { margin-top:16px; } .preset-actions { display:flex;flex-wrap:wrap;gap:7px;margin-top:9px; }
+.presets { margin-top:16px; } .presets h3 {margin:0;} .preset-actions { display:flex;flex-wrap:wrap;gap:7px;margin-top:9px; }
 .work-grid { display:grid; grid-template-columns:.76fr 1.24fr; gap:18px; margin-bottom:18px; align-items:start; }
 .profile-list { display:grid; gap:10px; }
 .profile-card { background:var(--surface-2); border:1px solid var(--line); padding:14px; border-radius:12px; }

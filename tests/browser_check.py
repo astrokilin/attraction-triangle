@@ -3,6 +3,7 @@ from pathlib import Path
 from playwright.sync_api import sync_playwright
 import re
 import tempfile
+import json
 root=Path(__file__).resolve().parents[1]
 artifacts=Path(tempfile.mkdtemp(prefix='triangle-browser-'))
 
@@ -83,9 +84,117 @@ def check_partner_weights(page):
     summary.click()
     assert [slider.input_value() for slider in sliders.all()]==['100','0','50','50']
     assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+2'), 'advanced settings must fit the viewport'
+    before=weights()
     page.locator('[data-preset="masculine"]').click()
     page.locator('#addProfileBtn').click()
-    assert weights()==[100,100], 'adding to a single-partner preset must keep equal significance'
+    assert weights()==before+[50,50], 'presets and adding must preserve existing custom weights'
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.reload()
+
+def check_partner_presets(page):
+    assert page.locator('.presets h3').inner_text()=='Быстрые примеры партнёров'
+    assert page.locator('[data-preset]').all_text_contents()==[
+        'Женственный партнёр','Мужественный партнёр','Андрогинный партнёр','Два противоположных партнёра']
+    page.locator('input[data-role="own"]').first.locator('..').click()
+    page.locator('#partnerSettings summary').click()
+    page.locator('input[data-weight-id]').first.press('End')
+    page.locator('input[data-weight-id]').nth(1).press('Home')
+    page.locator('#partnerSettings summary').click()
+    for preset,count in [('feminine',1),('masculine',1),('androgynous',1),('poles',2)]:
+        button=page.locator(f'[data-preset="{preset}"]')
+        button.scroll_into_view_if_needed()
+        page.wait_for_timeout(350)
+        before=page.evaluate('structuredClone(workspace())')
+        scroll=page.evaluate('window.scrollY')
+        button.click()
+        page.wait_for_timeout(500)
+        assert page.evaluate('window.scrollY')==scroll, f'{preset} must not scroll the main page'
+        assert button.evaluate('(el)=>el===document.activeElement'), 'preset focus must remain on its button'
+        after=page.evaluate('structuredClone(workspace())')
+        assert after['own']==before['own'], 'presets must never modify own characteristics'
+        assert after['ideals'][:len(before['ideals'])]==before['ideals'], 'existing partners must stay intact'
+        added=after['ideals'][len(before['ideals']):]
+        assert len(added)==count
+        assert len({p['id'] for p in after['ideals']})==len(after['ideals'])
+        assert after['selected']==added[0]['id']
+        assert page.locator('#currentProfileName').inner_text()==added[0]['name']
+        result=page.evaluate('(count)=>evaluateTriangle(workspace().own,workspace().ideals.slice(-count),current().traits)',count)
+        assert result['ok']
+        assert page.locator('#bothValue').inner_text()==page.evaluate('percent(evaluateTriangle(workspace().own,workspace().ideals,current().traits).both)'), 'triangle must reflect additions immediately'
+        if preset=='feminine':
+            assert result['mu']==-1
+        elif preset=='masculine':
+            assert result['mu']==1
+        elif preset=='androgynous':
+            assert 0<abs(result['mu'])<0.1
+            assert result['both']==0, 'a single androgynous partner must remain one representation'
+            closest=page.evaluate('''()=>{
+              const active=current().traits.filter(t=>t.enabled&&t.weight>0);
+              const total=active.reduce((s,t)=>s+t.weight,0);
+              let best=Infinity;
+              for(let mask=0;mask<2**active.length;mask++){
+                const sum=active.reduce((s,t,i)=>s+t.weight*((mask>>i&1)?1:-1),0);
+                if(Math.abs(sum/total)>1e-9)best=Math.min(best,Math.abs(sum/total));
+              }
+              return best;
+            }''')
+            assert abs(abs(result['mu'])-closest)<1e-10, 'androgynous example must use the nearest nonzero score'
+        else:
+            assert added[0]['weight']==added[1]['weight']>0
+            assert [p['identity'] for p in result['evaluated']]==[-1,1]
+            assert [p['probability'] for p in result['evaluated']]==[0.5,0.5]
+            assert result['mu']==0 and result['r']==1 and result['both']==1, 'opposite partners must remain two poles, not an averaged vector'
+    saved=page.evaluate('JSON.parse(localStorage.getItem("representation-triangle-ru-v3")).project')
+    page.reload()
+    assert page.evaluate('JSON.parse(localStorage.getItem("representation-triangle-ru-v3")).project')==saved
+    before=page.evaluate('structuredClone(workspace())')
+    page.locator('input[data-role="ideal"]').nth(1).locator('..').click()
+    after=page.evaluate('structuredClone(workspace())')
+    assert after['own']==before['own']
+    assert after['ideals'][-2]['answers']!=before['ideals'][-2]['answers'], 'generated partners must be editable'
+    assert after['ideals'][-1]==before['ideals'][-1], 'editing one generated partner must not change the other'
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.reload()
+
+def check_custom_presets(page):
+    fixture=page.evaluate('''()=>{
+      const p=newProject(),q=makeQuestionnaire(activeQuestionnaire(p),'preset_custom','Примеры с моими весами',true);
+      q.traits=[9,3,1,20].map((weight,i)=>({id:`custom_${i}`,question:`Вопрос ${i}`,female:'А',male:'Б',group:groupOrder[0],note:'',weight,enabled:i<3}));
+      fillMissingAnswers(q);
+      q.workspace.ideals[0].weight=23;q.workspace.ideals[1].weight=77;
+      p.questionnaires.push(q);p.activeQuestionnaireId=q.id;
+      return {format:'representation-triangle-ru-v3',project:p};
+    }''')
+    def import_fixture(data,count):
+        page.locator('#importFile').set_input_files({'name':'presets.json','mimeType':'application/json','buffer':json.dumps(data).encode()})
+        page.wait_for_function('(expected)=>document.getElementById("questionnaireSelect").value===expected.id && document.querySelectorAll("#profileList .profile-card").length===expected.count',arg={'id':data['project']['activeQuestionnaireId'],'count':count})
+    import_fixture(fixture,2)
+    assert page.locator('#questionnaireSelect').input_value()=='preset_custom'
+    before=page.evaluate('structuredClone(project)')
+    page.locator('[data-preset="androgynous"]').click()
+    result=page.evaluate('evaluateIdentity(selectedIdeal().answers,current().traits)')
+    assert result['ok'] and abs(abs(result['value'])-5/13)<1e-10, 'custom weights and disabled questions must determine the nearest nonzero profile'
+    assert page.evaluate('workspace().own')==before['questionnaires'][1]['workspace']['own']
+    page.locator('[data-preset="poles"]').click()
+    result=page.evaluate('evaluateTriangle(workspace().own,workspace().ideals.slice(-2),current().traits)')
+    assert result['both']==1 and [p['identity'] for p in result['evaluated']]==[-1,1]
+    assert page.evaluate('project.questionnaires[0]')==before['questionnaires'][0], 'inactive questionnaires must not change'
+    assert page.evaluate('workspace().ideals.slice(0,2)')==before['questionnaires'][1]['workspace']['ideals']
+    base=fixture['project']['questionnaires'][1]['workspace']['ideals'][0]
+    fixture['project']['questionnaires'][1]['workspace']['ideals']=[{**base,'id':f'limit_{i}'} for i in range(29)]
+    fixture['project']['questionnaires'][1]['workspace']['selected']='limit_0'
+    import_fixture(fixture,29)
+    before=page.evaluate('structuredClone(workspace())')
+    page.once('dialog',lambda d:d.accept())
+    page.locator('[data-preset="poles"]').click()
+    assert page.evaluate('workspace()')==before, 'two-partner presets must respect the limit atomically'
+    page.locator('[data-preset="feminine"]').click()
+    assert page.locator('.profile-card').count()==30
+    page.once('dialog',lambda d:d.accept())
+    page.locator('[data-preset="masculine"]').click()
+    assert page.locator('.profile-card').count()==30
     page.once('dialog',lambda d:d.accept())
     page.locator('#resetBtn').click()
     page.reload()
@@ -134,6 +243,8 @@ with sync_playwright() as p:
     errors=[]
     page.on('pageerror',lambda exc:errors.append(str(exc)))
     load_app(page)
+    check_partner_presets(page)
+    check_custom_presets(page)
     check_partner_weights(page)
     assert page.locator('html').get_attribute('lang')=='ru'
     assert page.locator('#questionnaireStatus').inner_text().startswith('16 вопросов')
@@ -201,12 +312,14 @@ with sync_playwright() as p:
     page.once('dialog',lambda d:d.accept('Пустая'))
     page.locator('#blankQuestionnaireBtn').click()
     assert page.locator('.question').count()==0
+    assert page.locator('[data-preset]:disabled').count()==4, 'empty questionnaires cannot produce valid examples'
     page.locator('#traitEditor').evaluate('(e)=>e.open=true')
     page.locator('[name="question"]').fill('Новый вопрос?')
     page.locator('[name="female"]').fill('А')
     page.locator('[name="male"]').fill('Б')
     page.locator('#addTraitForm button[type="submit"]').click()
     assert page.locator('.question').count()==1
+    assert page.locator('[data-preset]:disabled').count()==0
     assert not page.locator('#errorMessage').is_visible()
     with page.expect_download() as dl:
         page.locator('#exportBtn').click()
@@ -224,11 +337,12 @@ with sync_playwright() as p:
     assert not errors,errors
     phone=browser.new_page(viewport={'width':390,'height':844},device_scale_factor=1)
     load_app(phone)
+    check_partner_presets(phone)
     check_partner_weights(phone)
     check_answer_scrolling(phone)
     phone.screenshot(path=str(artifacts/'mobile.png'),full_page=True)
     assert phone.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 2'), 'horizontal overflow on mobile'
     assert not errors,errors
-    print('BROWSER SMOKE PASS: advanced weights/equal defaults/live triangle/persistence/JSON on desktop and mobile, answer and keyboard scrolling, wheel, navigation, partner switching/names, questionnaire editing, responsive layouts')
+    print('BROWSER SMOKE PASS: additive/editable partner presets, two-pole distribution vs one androgynous partner, custom questionnaires/weights, partner limits, own data and scrolling preserved, advanced weights, persistence/JSON, responsive layouts')
     print(f'Browser artifacts: {artifacts}')
     browser.close()
