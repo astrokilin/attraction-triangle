@@ -15,6 +15,39 @@ test('default questionnaire selected and source is immutable by convention',()=>
   assert.equal(activeQuestionnaire(p).builtin,true);
   assert.ok(validateProject(p));
 });
+test('fresh and blank workspaces use numbered partners without changing their profiles',()=>{
+  const q=activeQuestionnaire(newProject());
+  for (const workspace of [q.workspace,makeQuestionnaire(q,'blank_names','Пустая',true).workspace]) {
+    assert.deepEqual(workspace.ideals.map(p=>p.name),['Партнер 1','Партнер 2']);
+    assert.equal(workspace.selected,'ideal_male');
+    assert.deepEqual(workspace.ideals.map(p=>p.weight),[50,50]);
+  }
+  assert.ok(Object.values(q.workspace.ideals[0].answers).every(a=>a===0));
+  assert.ok(Object.values(q.workspace.ideals[1].answers).every(a=>a===1));
+});
+test('legacy default names migrate without changing answers, weights, selection or source data',()=>{
+  const project=newProject(),workspace=activeQuestionnaire(project).workspace;
+  workspace.ideals[0].name='Фемининный полюс';
+  workspace.ideals[1].name='Маскулинный полюс';
+  workspace.ideals[0].answers.genitals=1;
+  workspace.ideals[1].weight=73;
+  workspace.selected=workspace.ideals[0].id;
+  const before=structuredClone(workspace);
+  const restored=activeQuestionnaire(importProject({format:'representation-triangle-ru-v3',project})).workspace;
+  assert.deepEqual(restored,{...before,ideals:before.ideals.map((p,i)=>({...p,name:`Партнер ${i+1}`}))});
+  assert.deepEqual(workspace,before);
+});
+test('imports and questionnaire copies preserve custom partner names',()=>{
+  const project=newProject(),q=activeQuestionnaire(project);
+  q.workspace.ideals[0].name='Саша <3';
+  q.workspace.ideals[1].name='Мой партнер';
+  const custom=makeQuestionnaire(q,'custom_names','Моя анкета');
+  custom.workspace.ideals[0].id='custom_partner';
+  custom.workspace.ideals[0].name='Фемининный полюс';
+  project.questionnaires.push(custom);
+  const restored=importProject(JSON.parse(JSON.stringify({format:'representation-triangle-ru-v3',project})));
+  assert.deepEqual(restored,project);
+});
 test('duplicated questionnaire can diverge without modifying default',()=>{
   const p=newProject(),base=activeQuestionnaire(p);
   const c=makeQuestionnaire(base,'new_1','Моя анкета');p.questionnaires.push(c);p.activeQuestionnaireId=c.id;

@@ -36,10 +36,10 @@ function renderProfiles() {
     const score=evaluateIdentity(p.answers,current().traits);
     const share=total>0? (Number(p.weight)/total*100).toFixed(1):'0.0';
     return `<article class="profile-card ${p.id===w.selected?'selected':''}">
-      <div class="profile-top"><button type="button" class="profile-select" data-action="select" data-id="${escapeHtml(p.id)}" title="Редактировать этот вектор">${escapeHtml(p.name)}</button>
+      <div class="profile-top"><button type="button" class="profile-select" data-action="select" data-id="${escapeHtml(p.id)}" title="Редактировать характеристики партнера">${escapeHtml(p.name)}</button>
       <button type="button" class="icon-btn" data-action="remove" data-id="${escapeHtml(p.id)}" aria-label="Удалить ${escapeHtml(p.name)}" ${w.ideals.length===1?'disabled':''}>×</button></div>
-      <div class="profile-sub">${score.ok?`Профиль Y: ${fixed(score.value)}`:'Профиль Y не определён (нарушение правила модели)'} · ${share}% веса предпочтений</div>
-      <div class="weight-row"><label for="w_${escapeHtml(p.id)}">Вес</label><input id="w_${escapeHtml(p.id)}" aria-label="Вес вектора ${escapeHtml(p.name)}" type="range" min="0" max="100" step="1" value="${p.weight}" data-weight-id="${escapeHtml(p.id)}"/><output data-weight-output="${escapeHtml(p.id)}">${p.weight}</output></div>
+      <div class="profile-sub">${score.ok?`Профиль партнера: ${fixed(score.value)}`:'Профиль партнера не определён (нарушение правила модели)'} · ${share}% веса предпочтений</div>
+      <div class="weight-row"><label for="w_${escapeHtml(p.id)}">Вес</label><input id="w_${escapeHtml(p.id)}" aria-label="Вес предпочтения партнера ${escapeHtml(p.name)}" type="range" min="0" max="100" step="1" value="${p.weight}" data-weight-id="${escapeHtml(p.id)}"/><output data-weight-output="${escapeHtml(p.id)}">${p.weight}</output></div>
       <div class="profile-actions"><button type="button" class="text-btn" data-action="rename" data-id="${escapeHtml(p.id)}">Переименовать</button><button type="button" class="text-btn" data-action="duplicate" data-id="${escapeHtml(p.id)}">Копировать</button></div>
     </article>`;
   }).join('');
@@ -52,7 +52,7 @@ function renderQuestions() {
   $('questionList').innerHTML=groups.map(group=>{
     const items=active.filter(t=>t.group===group);
     return `<section class="question-group"><h3>${escapeHtml(group)}</h3>${items.map(t=>{
-      const fields=(role,answers)=>`<div class="answer-group ${role==='ideal'?'ideal':''}"><span class="mini-header">${role==='own'?'ОБЪЕКТ X':'ОБЪЕКТ Y (ПРЕДПОЧТЕНИЕ)'}</span><div class="pair">${[0,1].map(value=>`<label class="choice"><input type="radio" name="q_${role}_${escapeHtml(t.id)}" data-trait="${escapeHtml(t.id)}" data-role="${role}" value="${value}" ${answers[t.id]===value?'checked':''}/><span>${escapeHtml(value===0?t.female:t.male)}</span></label>`).join('')}</div></div>`;
+      const fields=(role,answers)=>`<div class="answer-group ${role==='ideal'?'ideal':''}"><span class="mini-header">${role==='own'?'Я':'ПАРТНЕР'}</span><div class="pair">${[0,1].map(value=>`<label class="choice"><input type="radio" name="q_${role}_${escapeHtml(t.id)}" data-trait="${escapeHtml(t.id)}" data-role="${role}" value="${value}" ${answers[t.id]===value?'checked':''}/><span>${escapeHtml(value===0?t.female:t.male)}</span></label>`).join('')}</div></div>`;
       return `<div class="question"><div class="question-head"><strong>${escapeHtml(t.question)}</strong><small title="${escapeHtml(t.note)}">вес ${Number(t.weight).toFixed(2)} ⓘ</small></div><div class="answer-grid">${fields('own',w.own)}${fields('ideal',ideal.answers)}</div></div>`;
     }).join('')}</section>`;
   }).join('')||'<p class="helper">В этой анкете нет активных вопросов. Добавьте их в конструкторе ниже.</p>';
@@ -79,7 +79,7 @@ function paintResult(result) {
   $('positionDot').style.opacity=result.ok?'1':'.18'; $('positionGlow').style.opacity=result.ok?'.15':'.03';
   if (!result.ok) {
     setText('identityLabel','Профиль не определён');
-    setText('identityNumber','I(x): —');
+    setText('identityNumber','Мой индекс: —');
     setText('identityDescription','Проверьте выбранные ответы и веса анкеты.');
     $('identityMeter').setAttribute('aria-valuenow','0');
     $('identityMeter').setAttribute('aria-valuetext','Профиль не определён');
@@ -93,8 +93,8 @@ function paintResult(result) {
   const intensity=strength<0.15?'Едва заметное':strength<0.4?'Небольшое':strength<0.7?'Умеренное':'Выраженное';
   const modelName=female?'женской':'мужской';
   setText('identityLabel',female?'Преобладает женская модель':'Преобладает мужская модель');
-  setText('identityNumber',`I(x): ${fixed(result.a)}`);
-  setText('identityDescription',`${intensity} преобладание ${modelName} модели по выбранным вопросам. Это характеризует профиль X, а не его ориентацию.`);
+  setText('identityNumber',`Мой индекс: ${fixed(result.a)}`);
+  setText('identityDescription',`${intensity} преобладание ${modelName} модели по выбранным вопросам. Это описание моих характеристик, а не моей ориентации.`);
   $('identityMarker').style.left=`${Math.max(0,Math.min(100,(result.a+1)*50))}%`;
   $('identityMeter').setAttribute('aria-valuenow',String(result.a));
   $('identityMeter').setAttribute('aria-valuetext',`${female?'Женская':'Мужская'} модель, индекс ${fixed(result.a)}`);
@@ -147,23 +147,23 @@ $('profileList').addEventListener('click',event=>{
   const w=workspace(),p=w.ideals.find(item=>item.id===btn.dataset.id);if(!p)return;
   if(btn.dataset.action==='select')w.selected=p.id;
   if(btn.dataset.action==='remove'){if(w.ideals.length<=1)return;w.ideals=w.ideals.filter(item=>item.id!==p.id);if(w.selected===p.id)w.selected=w.ideals[0].id;}
-  if(btn.dataset.action==='duplicate'){if(w.ideals.length>=30)return alert('Не более 30 предпочитаемых профилей.');const c={...clone(p),id:uid(),name:`${p.name} (копия)`};w.ideals.push(c);w.selected=c.id;}
-  if(btn.dataset.action==='rename'){const name=prompt('Название предпочитаемого вектора',p.name);if(name!==null&&name.trim())p.name=name.trim().slice(0,80);}
+  if(btn.dataset.action==='duplicate'){if(w.ideals.length>=30)return alert('Не более 30 партнеров.');const c={...clone(p),id:uid(),name:`${p.name} (копия)`};w.ideals.push(c);w.selected=c.id;}
+  if(btn.dataset.action==='rename'){const name=prompt('Имя партнера',p.name);if(name!==null&&name.trim())p.name=name.trim().slice(0,80);}
   renderProfiles();renderQuestions();updateDashboard();persist();
 });
 $('addProfileBtn').addEventListener('click',()=>{
-  const w=workspace();if(w.ideals.length>=30)return alert('Не более 30 предпочитаемых профилей.');
-  const previous=selectedIdeal();const p={id:uid(),name:`Предпочитаемый вектор ${w.ideals.length+1}`,answers:clone(previous?.answers??w.own),weight:50};
+  const w=workspace();if(w.ideals.length>=30)return alert('Не более 30 партнеров.');
+  const previous=selectedIdeal();const p={id:uid(),name:`Партнер ${w.ideals.length+1}`,answers:clone(previous?.answers??w.own),weight:50};
   w.ideals.push(p);w.selected=p.id;change();
 });
 function applyPreset(name) {
   const q=current(),w=workspace(),traits=q.traits;
   const fem=()=>allAnswers(traits,0),masc=()=>allAnswers(traits,1);
   const add=(label,answers,weight=50)=>({id:uid(),name:label,answers,weight});
-  if(name==='poles')w.ideals=[add('Фемининный полюс',fem()),add('Маскулинный полюс',masc())];
-  if(name==='androgynous')w.ideals=[add('Околонулевой фемининный',nearestToZero(traits,-1)),add('Околонулевой маскулинный',nearestToZero(traits,1))];
-  if(name==='masculine')w.ideals=[add('Маскулинный полюс',masc(),100)];
-  if(name==='feminine')w.ideals=[add('Фемининный полюс',fem(),100)];
+  if(name==='poles')w.ideals=[add('Партнер 1',fem()),add('Партнер 2',masc())];
+  if(name==='androgynous')w.ideals=[add('Партнер 1',nearestToZero(traits,-1)),add('Партнер 2',nearestToZero(traits,1))];
+  if(name==='masculine')w.ideals=[add('Партнер 1',masc(),100)];
+  if(name==='feminine')w.ideals=[add('Партнер 1',fem(),100)];
   w.selected=w.ideals[0].id;change();
 }
 document.querySelectorAll('button[data-preset]').forEach(btn=>btn.addEventListener('click',()=>applyPreset(btn.dataset.preset)));

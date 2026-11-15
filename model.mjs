@@ -32,19 +32,19 @@ export function evaluateIdentity(answers, traits) {
 
 export function evaluateTriangle(ownAnswers, ideals, traits) {
   const own = evaluateIdentity(ownAnswers, traits);
-  if (!own.ok) return { ok: false, context: 'Представление объекта', reason: own.reason };
+  if (!own.ok) return { ok: false, context: 'Мои характеристики', reason: own.reason };
 
   const relevant = ideals.filter(p => Number(p.weight) > 0);
   const totalWeight = relevant.reduce((sum, p) => sum + Number(p.weight), 0);
   if (!relevant.length || totalWeight <= EPS) {
-    return { ok: false, context: 'Предпочтения', reason: 'Хотя бы один предпочитаемый вектор должен иметь положительный вес.' };
+    return { ok: false, context: 'Мои предпочтения', reason: 'Хотя бы один партнер должен иметь положительный вес предпочтения.' };
   }
   let mu = 0;
   let r = 0;
   const evaluated = [];
   for (const p of relevant) {
     const result = evaluateIdentity(p.answers, traits);
-    if (!result.ok) return { ok: false, context: `Предпочитаемый вектор “${p.name}”`, reason: result.reason };
+    if (!result.ok) return { ok: false, context: `Партнер “${p.name}”`, reason: result.reason };
     const probability = Number(p.weight) / totalWeight;
     mu += probability * result.value;
     r += probability * Math.abs(result.value);

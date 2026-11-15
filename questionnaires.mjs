@@ -9,8 +9,8 @@ export function newWorkspace(traits) {
   return {
     own: allAnswers(traits, 1),
     ideals: [
-      { id: 'ideal_female', name: 'Фемининный полюс', answers: allAnswers(traits, 0), weight: 50 },
-      { id: 'ideal_male', name: 'Маскулинный полюс', answers: allAnswers(traits, 1), weight: 50 }
+      { id: 'ideal_female', name: 'Партнер 1', answers: allAnswers(traits, 0), weight: 50 },
+      { id: 'ideal_male', name: 'Партнер 2', answers: allAnswers(traits, 1), weight: 50 }
     ],
     selected: 'ideal_male'
   };
@@ -58,10 +58,10 @@ export function validateProject(project) {
     if (!w || !Array.isArray(w.ideals) || !w.ideals.length || w.ideals.length > 30 || !isAnswers(w.own,q.traits)) throw new Error('Некорректные профили.');
     const pids = new Set();
     for (const p of w.ideals) {
-      if (!safeId(p.id) || pids.has(p.id) || typeof p.name !== 'string' || !p.name.trim() || p.name.length > 80 || !Number.isFinite(p.weight) || p.weight < 0 || p.weight > 100 || !isAnswers(p.answers,q.traits)) throw new Error('Некорректный предпочитаемый вектор.');
+      if (!safeId(p.id) || pids.has(p.id) || typeof p.name !== 'string' || !p.name.trim() || p.name.length > 80 || !Number.isFinite(p.weight) || p.weight < 0 || p.weight > 100 || !isAnswers(p.answers,q.traits)) throw new Error('Некорректный профиль партнера.');
       pids.add(p.id);
     }
-    if (!pids.has(w.selected)) throw new Error('Не существует выбранного вектора.');
+    if (!pids.has(w.selected)) throw new Error('Не существует выбранного партнера.');
   }
   if (!qids.has('default') || !qids.has(project.activeQuestionnaireId)) throw new Error('Неизвестная активная анкета.');
   return true;
@@ -78,7 +78,14 @@ export function importProject(raw) {
     builtin.workspace = original.workspace;
   }
   project.questionnaires = [builtin,...project.questionnaires.filter(q=>q.id!=='default')];
-  for (const q of project.questionnaires) fillMissingAnswers(q);
+  for (const q of project.questionnaires) {
+    // Rename only the original generated defaults, preserving custom partner names.
+    for (const p of q.workspace.ideals) {
+      if (p.id === 'ideal_female' && p.name === 'Фемининный полюс') p.name = 'Партнер 1';
+      if (p.id === 'ideal_male' && p.name === 'Маскулинный полюс') p.name = 'Партнер 2';
+    }
+    fillMissingAnswers(q);
+  }
   validateProject(project);
   return project;
 }

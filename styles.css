@@ -99,10 +99,11 @@ a { color: var(--aqua); }
 .answer-grid {display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .answer-group .mini-header {display:block;margin-bottom:5px;font-size:10px;color:#95a8bc;}
 .answer-group .pair {display:flex;gap:4px;}
-.choice { display:flex;align-items:center;justify-content:center;flex:1;min-height:39px; padding:6px 7px; background:#202c3b;border:1px solid #3b4b60;border-radius:7px;cursor:pointer;font-size:10px;line-height:1.25;text-align:center; color:#adbacb; }
+/* Keep the focusable radio inside its visible answer, including when the list scrolls. */
+.choice { position:relative;display:flex;align-items:center;justify-content:center;flex:1;min-height:39px; padding:6px 7px; background:#202c3b;border:1px solid #3b4b60;border-radius:7px;cursor:pointer;font-size:10px;line-height:1.25;text-align:center; color:#adbacb; }
 .choice:has(input:checked) {border-color:#b3bddc;background:#333e58;color:#fff;}
 .answer-group.ideal .choice:has(input:checked) { border-color:#59c8bf;background:#214847;color:#e7fffc; }
-.choice input { position:absolute;opacity:0;width:1px;height:1px; }
+.choice input { position:absolute;top:50%;left:50%;margin:0;opacity:0;width:1px;height:1px; }
 .choice:has(input:focus-visible) {outline:2px solid var(--aqua);outline-offset:2px;}
 .editor-panel { margin-bottom:20px; }
 details > summary {display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;font-size:12px;font-weight:700;padding:14px 16px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;list-style:none;}
@@ -169,6 +170,10 @@ footer {padding:21px 0 30px;color:#8292a6;font-size:10px;text-align:center;borde
 .identity-summary strong {font-size:20px;line-height:1.25;letter-spacing:-.025em;}
 .identity-summary span {font-size:12px;font-variant-numeric:tabular-nums;color:var(--aqua);}
 .identity-overview p {font-size:12px;line-height:1.65;color:#bac9d9;margin:12px 0 16px;}
+/* Reserve description space so live text changes do not shift the questionnaire below. */
+.identity-description {display:grid;}
+.identity-description > p {grid-area:1 / 1;}
+.identity-description-space {visibility:hidden;}
 .identity-meter {padding:12px 0 0;}
 .identity-meter-track {position:relative;border-radius:20px;height:15px;background:linear-gradient(90deg,#dca1a8 0%,#b19ac0 27%,#7b8494 50%,#84c3c2 73%,#60c8b1 100%);border:1px solid #64758a;}
 .identity-middle {width:2px;height:27px;background:#f2f4fa;opacity:.62;position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);border-radius:3px;}
