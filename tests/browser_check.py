@@ -30,6 +30,81 @@ def load_app(page):
 def scroll_positions(page):
     return page.evaluate('({page:window.scrollY,list:document.getElementById("questionList").scrollTop})')
 
+def create_partner_copy(page):
+    count=page.locator('.profile-card').count()
+    page.locator('#addProfileBtn').click()
+    page.locator('#duplicatePartnerDialog button[value="edit"]').click()
+    page.wait_for_function('(count)=>document.querySelectorAll(".profile-card").length===count',arg=count+1)
+
+def check_duplicate_partners(page):
+    dialog=page.locator('#duplicatePartnerDialog')
+    result=lambda:page.evaluate('evaluateTriangle(workspace().own,workspace().ideals,current().traits)')
+    before=page.evaluate('structuredClone(workspace())')
+    expected=result()
+    page.locator('#addProfileBtn').click()
+    assert dialog.is_visible()
+    assert dialog.locator('[value="select"]').evaluate('(el)=>el===document.activeElement')
+    dialog.locator('[value="cancel"]').click()
+    assert page.evaluate('workspace()')==before, 'cancel must leave all data intact'
+    page.locator('#addProfileBtn').click()
+    dialog.locator('[value="select"]').click()
+    assert page.locator('.profile-card').count()==2
+    assert result()==expected, 'selecting an identical existing partner must not change the triangle'
+    page.locator('[data-action="duplicate"]').first.click()
+    dialog.locator('[value="select"]').click()
+    page.wait_for_function('document.getElementById("currentProfileName").textContent==="Партнер 1"')
+    assert page.locator('#currentProfileName').inner_text()=='Партнер 1'
+    assert page.locator('.profile-card').count()==2
+    for count in [3,4]:
+        create_partner_copy(page)
+        assert page.locator('.profile-card').count()==count
+        assert result()==expected, 'one or two saved copies must not change the result'
+    page.locator('#partnerSettings summary').click()
+    assert page.locator('[data-weight-share]').all_text_contents()==['50.0','50.0','0.0','0.0']
+    assert page.locator('input[data-weight-id]').nth(2).is_disabled()
+    assert page.locator('input[data-weight-id]').nth(3).is_disabled()
+    assert 'Используется вес «Партнер 1»' in page.locator('#partnerWeightList').inner_text()
+    assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+2')
+    fixture=page.evaluate('({format:"representation-triangle-ru-v3",project:structuredClone(project)})')
+    for partner,weight in zip(fixture['project']['questionnaires'][0]['workspace']['ideals'],[20,80,99,0]):
+        partner['weight']=weight
+    page.locator('#importFile').set_input_files({'name':'duplicates.json','mimeType':'application/json','buffer':json.dumps(fixture).encode()})
+    page.wait_for_function('document.querySelector("input[data-weight-id]").value==="20"')
+    expected=result()
+    assert abs(expected['both']-0.4)<1e-10
+    page.reload()
+    assert page.evaluate('project')==fixture['project'], 'localStorage must retain all duplicate records and weights'
+    assert result()==expected
+    with page.expect_download() as dl:
+        page.locator('#exportBtn').click()
+    export_path=artifacts/f'duplicates-{page.viewport_size["width"]}.json'
+    dl.value.save_as(str(export_path))
+    assert json.loads(export_path.read_text())['project']==fixture['project']
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.locator('#importFile').set_input_files(str(export_path))
+    page.wait_for_function('document.querySelectorAll(".profile-card").length===4')
+    assert page.evaluate('project')==fixture['project']
+    assert result()==expected, 'JSON must round trip duplicates without changing their effective influence'
+    page.locator('.profile-select').nth(2).click()
+    answer=page.locator('input[data-role="ideal"][value="1"]').first
+    answer.locator('..').scroll_into_view_if_needed()
+    page.wait_for_timeout(350)
+    scroll=scroll_positions(page)
+    answer.locator('..').click()
+    page.wait_for_timeout(350)
+    assert scroll_positions(page)==scroll, 'editing a duplicate into a unique partner must not jump'
+    assert result()!=expected, 'genuinely different partner must influence the triangle'
+    assert page.locator('input[data-weight-id]').nth(2).is_enabled()
+    assert page.evaluate('workspace().own')==before['own']
+    expected=result()
+    page.locator('#partnerSettings summary').click()
+    page.locator('input[data-weight-id]').first.press('End')
+    assert result()!=expected, 'explicit unique weights must still affect the result'
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.reload()
+
 def check_partner_weights(page):
     settings=page.locator('#partnerSettings')
     summary=settings.locator('summary')
@@ -41,7 +116,8 @@ def check_partner_weights(page):
     assert not sliders.first.is_visible()
     assert page.locator('#profileList input[type="range"]').count()==0
     assert 'веса предпочтений' not in page.locator('#profileList').inner_text()
-    page.locator('#addProfileBtn').click()
+    create_partner_copy(page)
+    page.locator('input[data-role="ideal"][value="0"]').first.locator('..').click()
     assert weights()==[50,50,50]
     probabilities=page.evaluate('evaluateTriangle(workspace().own,workspace().ideals,current().traits).evaluated.map(p=>p.probability)')
     assert probabilities==[1/3]*3, 'new default partners must have equal effective weights'
@@ -50,7 +126,6 @@ def check_partner_weights(page):
     before=page.locator('#bothValue').inner_text()
     sliders.first.press('End')
     assert weights()==[100,50,50]
-    assert page.locator('#bothValue').inner_text()=='100.0%'
     assert page.locator('#bothValue').inner_text()!=before, 'advanced weights must update the triangle live'
     assert settings.locator('[data-weight-share]').all_text_contents()==['50.0','25.0','25.0']
     assert sliders.first.evaluate('(el)=>el===document.activeElement'), 'weight adjustment must retain slider focus'
@@ -68,7 +143,7 @@ def check_partner_weights(page):
     page.reload()
     assert not settings.evaluate('(el)=>el.open'), 'advanced settings start collapsed on page load'
     assert state()==saved and weights()==[100,0,50], 'custom and zero weights must survive reload'
-    page.locator('#addProfileBtn').click()
+    create_partner_copy(page)
     assert weights()==[100,0,50,50], 'adding must preserve existing custom weights'
     saved=state()
     with page.expect_download() as dl:
@@ -84,10 +159,9 @@ def check_partner_weights(page):
     summary.click()
     assert [slider.input_value() for slider in sliders.all()]==['100','0','50','50']
     assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+2'), 'advanced settings must fit the viewport'
-    before=weights()
     page.locator('[data-preset="masculine"]').click()
-    page.locator('#addProfileBtn').click()
-    assert weights()==before+[50,50], 'presets and adding must preserve existing custom weights'
+    create_partner_copy(page)
+    assert weights()==[50,50], 'editable copies must preserve their stored default weights'
     page.once('dialog',lambda d:d.accept())
     page.locator('#resetBtn').click()
     page.reload()
@@ -113,15 +187,17 @@ def check_partner_presets(page):
         assert button.evaluate('(el)=>el===document.activeElement'), 'preset focus must remain on its button'
         after=page.evaluate('structuredClone(workspace())')
         assert after['own']==before['own'], 'presets must never modify own characteristics'
-        assert after['ideals'][:len(before['ideals'])]==before['ideals'], 'existing partners must stay intact'
-        added=after['ideals'][len(before['ideals']):]
+        assert not {p['id'] for p in before['ideals']} & {p['id'] for p in after['ideals']}, 'presets must replace the previous partner set'
+        added=after['ideals']
         assert len(added)==count
+        assert [p['name'] for p in added]==[f'Партнер {i+1}' for i in range(count)]
+        assert all(p['weight']==50 for p in added), 'each preset starts with equal default weights'
         assert len({p['id'] for p in after['ideals']})==len(after['ideals'])
         assert after['selected']==added[0]['id']
         assert page.locator('#currentProfileName').inner_text()==added[0]['name']
         result=page.evaluate('(count)=>evaluateTriangle(workspace().own,workspace().ideals.slice(-count),current().traits)',count)
         assert result['ok']
-        assert page.locator('#bothValue').inner_text()==page.evaluate('percent(evaluateTriangle(workspace().own,workspace().ideals,current().traits).both)'), 'triangle must reflect additions immediately'
+        assert page.locator('#bothValue').inner_text()==page.evaluate('percent(evaluateTriangle(workspace().own,workspace().ideals,current().traits).both)'), 'triangle must reflect the selected set immediately'
         if preset=='feminine':
             assert result['mu']==-1
         elif preset=='masculine':
@@ -181,20 +257,20 @@ def check_custom_presets(page):
     result=page.evaluate('evaluateTriangle(workspace().own,workspace().ideals.slice(-2),current().traits)')
     assert result['both']==1 and [p['identity'] for p in result['evaluated']]==[-1,1]
     assert page.evaluate('project.questionnaires[0]')==before['questionnaires'][0], 'inactive questionnaires must not change'
-    assert page.evaluate('workspace().ideals.slice(0,2)')==before['questionnaires'][1]['workspace']['ideals']
+    assert page.locator('.profile-card').count()==2
+    assert page.evaluate('workspace().own')==before['questionnaires'][1]['workspace']['own']
     base=fixture['project']['questionnaires'][1]['workspace']['ideals'][0]
     fixture['project']['questionnaires'][1]['workspace']['ideals']=[{**base,'id':f'limit_{i}'} for i in range(29)]
     fixture['project']['questionnaires'][1]['workspace']['selected']='limit_0'
     import_fixture(fixture,29)
     before=page.evaluate('structuredClone(workspace())')
-    page.once('dialog',lambda d:d.accept())
     page.locator('[data-preset="poles"]').click()
-    assert page.evaluate('workspace()')==before, 'two-partner presets must respect the limit atomically'
+    assert page.locator('.profile-card').count()==2, 'presets must replace large partner sets'
+    assert page.evaluate('workspace().own')==before['own']
     page.locator('[data-preset="feminine"]').click()
-    assert page.locator('.profile-card').count()==30
-    page.once('dialog',lambda d:d.accept())
+    assert page.locator('.profile-card').count()==1
     page.locator('[data-preset="masculine"]').click()
-    assert page.locator('.profile-card').count()==30
+    assert page.locator('.profile-card').count()==1, 'switching one-partner sets must not accumulate profiles'
     page.once('dialog',lambda d:d.accept())
     page.locator('#resetBtn').click()
     page.reload()
@@ -243,6 +319,7 @@ with sync_playwright() as p:
     errors=[]
     page.on('pageerror',lambda exc:errors.append(str(exc)))
     load_app(page)
+    check_duplicate_partners(page)
     check_partner_presets(page)
     check_custom_presets(page)
     check_partner_weights(page)
@@ -337,12 +414,13 @@ with sync_playwright() as p:
     assert not errors,errors
     phone=browser.new_page(viewport={'width':390,'height':844},device_scale_factor=1)
     load_app(phone)
+    check_duplicate_partners(phone)
     check_partner_presets(phone)
     check_partner_weights(phone)
     check_answer_scrolling(phone)
     phone.screenshot(path=str(artifacts/'mobile.png'),full_page=True)
     assert phone.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 2'), 'horizontal overflow on mobile'
     assert not errors,errors
-    print('BROWSER SMOKE PASS: additive/editable partner presets, two-pole distribution vs one androgynous partner, custom questionnaires/weights, partner limits, own data and scrolling preserved, advanced weights, persistence/JSON, responsive layouts')
+    print('BROWSER SMOKE PASS: duplicate selection/cancel/edit, invariant triangle, unique weight controls, all saved duplicate records preserved through localStorage/JSON, preset switching, scrolling, responsive layouts')
     print(f'Browser artifacts: {artifacts}')
     browser.close()

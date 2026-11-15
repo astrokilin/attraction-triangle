@@ -6,6 +6,22 @@
 
 export const EPS = 1e-9;
 
+/** Full questionnaire vector, including disabled traits; independent of answer key order. */
+export function partnerVectorKey(answers, traits) {
+  return JSON.stringify(traits.map(t => answers?.[t.id]));
+}
+
+/** First saved profile owns the vector's explicit weight. Never sum duplicate weights. */
+export function uniquePartnerProfiles(ideals, traits) {
+  const seen = new Set();
+  return ideals.filter(p => {
+    const key = partnerVectorKey(p.answers, traits);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 export function evaluateIdentity(answers, traits) {
   const active = traits.filter(t => t.enabled && Number(t.weight) > 0);
   if (!active.length) return { ok: false, reason: 'Нет активных вопросов с положительными весами.' };
@@ -34,7 +50,7 @@ export function evaluateTriangle(ownAnswers, ideals, traits) {
   const own = evaluateIdentity(ownAnswers, traits);
   if (!own.ok) return { ok: false, context: 'Мои характеристики', reason: own.reason };
 
-  const relevant = ideals.filter(p => Number(p.weight) > 0);
+  const relevant = uniquePartnerProfiles(ideals, traits).filter(p => Number(p.weight) > 0);
   const totalWeight = relevant.reduce((sum, p) => sum + Number(p.weight), 0);
   if (!relevant.length || totalWeight <= EPS) {
     return { ok: false, context: 'Мои предпочтения', reason: 'Хотя бы один партнер должен иметь положительный вес предпочтения.' };

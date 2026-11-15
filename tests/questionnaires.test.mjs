@@ -77,6 +77,22 @@ test('invalid imports rejected',()=>{
   const p=newProject();p.questionnaires[0].traits[0].id='__proto__';
   assert.throws(()=>importProject({format:'representation-triangle-ru-v3',project:p}));
 });
+test('JSON round trips and questionnaire copies retain all duplicate records and their saved weights',()=>{
+  const project=newProject(),q=activeQuestionnaire(project);
+  q.workspace.ideals[0].weight=23;q.workspace.ideals[1].weight=77;
+  const baseline=evaluateTriangle(q.workspace.own,q.workspace.ideals,q.traits);
+  q.workspace.ideals.push({...structuredClone(q.workspace.ideals[0]),id:'saved_copy',name:'Моя сохранённая копия',weight:99});
+  q.workspace.selected='saved_copy';
+  const before=structuredClone(project);
+  const restored=importProject(JSON.parse(JSON.stringify({format:'representation-triangle-ru-v3',project})));
+  assert.deepEqual(restored,before);
+  assert.deepEqual(project,before);
+  const loaded=activeQuestionnaire(restored);
+  assert.equal(loaded.workspace.ideals.length,3);
+  assert.deepEqual(evaluateTriangle(loaded.workspace.own,loaded.workspace.ideals,loaded.traits),baseline);
+  const copy=makeQuestionnaire(loaded,'with_duplicates','Копия анкеты');
+  assert.deepEqual(copy.workspace,loaded.workspace);
+});
 test('model remains mathematically valid under edited questionnaires',()=>{
   const p=newProject();const c=makeQuestionnaire(activeQuestionnaire(p),'n4','Мои веса');
   c.traits[0].weight=8.5;c.traits[1].enabled=false;

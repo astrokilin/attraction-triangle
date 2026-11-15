@@ -73,7 +73,7 @@
             <div class="identity-meter-labels"><span>Женская модель</span><span>Мужская модель</span></div>
           </div>
         </div>
-        <div class="presets"><h3 class="mini-label">Быстрые примеры партнёров</h3><p class="preset-explanation">Кнопки добавляют редактируемые примеры в «Партнеры». Можно сравнить предпочтение двух противоположных партнёров с предпочтением одного андрогинного.</p><div class="preset-actions">
+        <div class="presets"><h3 class="mini-label">Быстрые примеры партнёров</h3><p class="preset-explanation">Кнопки заменяют текущий набор партнёров выбранным примером. Можно сравнить предпочтение двух противоположных партнёров с предпочтением одного андрогинного.</p><div class="preset-actions">
           <button type="button" class="button compact" data-preset="feminine">Женственный партнёр</button><button type="button" class="button compact" data-preset="masculine">Мужественный партнёр</button><button type="button" class="button compact" data-preset="androgynous">Андрогинный партнёр</button><button type="button" class="button compact" data-preset="poles">Два противоположных партнёра</button>
         </div></div>
       </div>
@@ -100,7 +100,7 @@
           <summary>Дополнительные настройки</summary>
           <p class="helper">Вес определяет, насколько сильно выбранный партнёр влияет на итоговый результат относительно остальных партнёров. По умолчанию все партнёры имеют одинаковую значимость.</p>
           <div id="partnerWeightList" class="partner-weight-list"></div>
-          <p class="helper">Веса относительные: 20 и 40 означают те же пропорции, что 1 и 2. Нулевой вес исключает партнера из расчета.</p>
+          <p class="helper">Веса относительные: 20 и 40 означают те же пропорции, что 1 и 2. Нулевой вес исключает партнера из расчета. Совпадающие наборы характеристик учитываются один раз с весом первого профиля.</p>
         </details>
       </div>
       <div class="panel questions-panel" id="questions">
@@ -129,5 +129,16 @@
     <p>Подробное философское обоснование, определения и формулы приведены в <a href="./docs/model-v2-english-thesis.docx" download>математическом описании модели (Word, .docx)</a>. Анкеты и ответы сохраняются локально в вашем браузере.</p>
   </footer>
 </div>
+<dialog id="duplicatePartnerDialog" class="partner-dialog" aria-labelledby="duplicatePartnerTitle" aria-describedby="duplicatePartnerDescription">
+  <form method="dialog">
+    <h2 id="duplicatePartnerTitle">Такой партнёр уже есть</h2>
+    <p id="duplicatePartnerDescription"></p>
+    <div class="partner-dialog-actions">
+      <button type="submit" class="button primary" value="select" autofocus>Выбрать существующего</button>
+      <button type="submit" class="button" value="edit">Создать для редактирования</button>
+      <button type="submit" class="button subtle" value="cancel">Отмена</button>
+    </div>
+  </form>
+</dialog>
 </body>
 </html>

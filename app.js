@@ -1,5 +1,5 @@
 import { groupOrder } from './traits.mjs';
-import { evaluateIdentity, evaluateTriangle, allAnswers, nearestToZero } from './model.mjs';
+import { evaluateIdentity, evaluateTriangle, allAnswers, nearestToZero, partnerVectorKey, uniquePartnerProfiles } from './model.mjs';
 import { newProject, makeQuestionnaire, activeQuestionnaire, fillMissingAnswers, importProject } from './questionnaires.mjs';
 
 const $ = id => document.getElementById(id);
@@ -36,6 +36,7 @@ function renderQuestionnaireSelect() {
 }
 function renderProfiles() {
   const w=workspace();
+  const originals=new Map(uniquePartnerProfiles(w.ideals,current().traits).map(p=>[partnerVectorKey(p.answers,current().traits),p]));
   $('profileList').innerHTML=w.ideals.map(p=>{
     const score=evaluateIdentity(p.answers,current().traits);
     return `<article class="profile-card ${p.id===w.selected?'selected':''}">
@@ -45,19 +46,24 @@ function renderProfiles() {
       <div class="profile-actions"><button type="button" class="text-btn" data-action="rename" data-id="${escapeHtml(p.id)}">Переименовать</button><button type="button" class="text-btn" data-action="duplicate" data-id="${escapeHtml(p.id)}">Копировать</button></div>
     </article>`;
   }).join('');
-  $('partnerWeightList').innerHTML=w.ideals.map(p=>`
+  $('partnerWeightList').innerHTML=w.ideals.map(p=>{
+    const original=originals.get(partnerVectorKey(p.answers,current().traits)),duplicate=original.id!==p.id;
+    return `
     <div class="partner-weight">
       <div class="partner-weight-heading"><label for="w_${escapeHtml(p.id)}">${escapeHtml(p.name)}</label><span><span data-weight-share="${escapeHtml(p.id)}"></span>%</span></div>
-      <div class="weight-row"><input id="w_${escapeHtml(p.id)}" aria-label="Вес предпочтения партнера ${escapeHtml(p.name)}" type="range" min="0" max="100" step="1" value="${p.weight}" data-weight-id="${escapeHtml(p.id)}"/><output for="w_${escapeHtml(p.id)}" data-weight-output="${escapeHtml(p.id)}">${p.weight}</output></div>
-    </div>`).join('');
+      <div class="weight-row"><input id="w_${escapeHtml(p.id)}" aria-label="Вес предпочтения партнера ${escapeHtml(p.name)}" type="range" min="0" max="100" step="1" value="${p.weight}" data-weight-id="${escapeHtml(p.id)}" ${duplicate?'disabled':''}/><output for="w_${escapeHtml(p.id)}" data-weight-output="${escapeHtml(p.id)}">${p.weight}</output></div>
+      ${duplicate?`<p class="helper">Используется вес «${escapeHtml(original.name)}». Измените характеристики, чтобы учитывать этот профиль отдельно.</p>`:''}
+    </div>`;
+  }).join('');
   updatePartnerWeightOutputs();
   $('currentProfileName').textContent=selectedIdeal()?.name||'—';
 }
 function updatePartnerWeightOutputs() {
-  const partners=workspace().ideals,total=partners.reduce((sum,p)=>sum+Math.max(0,Number(p.weight)),0);
+  const partners=workspace().ideals,unique=uniquePartnerProfiles(partners,current().traits);
+  const ids=new Set(unique.map(p=>p.id)),total=unique.reduce((sum,p)=>sum+Math.max(0,Number(p.weight)),0);
   for (const p of partners) {
     $('partnerWeightList').querySelector(`[data-weight-output="${p.id}"]`).textContent=String(p.weight);
-    $('partnerWeightList').querySelector(`[data-weight-share="${p.id}"]`).textContent=total>0?(Number(p.weight)/total*100).toFixed(1):'0.0';
+    $('partnerWeightList').querySelector(`[data-weight-share="${p.id}"]`).textContent=total>0&&ids.has(p.id)?(Number(p.weight)/total*100).toFixed(1):'0.0';
   }
 }
 function renderQuestions() {
@@ -160,7 +166,7 @@ $('profileList').addEventListener('click',event=>{
   const w=workspace(),p=w.ideals.find(item=>item.id===btn.dataset.id);if(!p)return;
   if(btn.dataset.action==='select')w.selected=p.id;
   if(btn.dataset.action==='remove'){if(w.ideals.length<=1)return;w.ideals=w.ideals.filter(item=>item.id!==p.id);if(w.selected===p.id)w.selected=w.ideals[0].id;}
-  if(btn.dataset.action==='duplicate'){if(w.ideals.length>=30)return alert('Не более 30 партнеров.');const c={...clone(p),id:uid(),name:`${p.name} (копия)`};w.ideals.push(c);w.selected=c.id;}
+  if(btn.dataset.action==='duplicate')return offerPartner({...clone(p),id:uid(),name:`${p.name} (копия)`});
   if(btn.dataset.action==='rename'){const name=prompt('Имя партнера',p.name);if(name!==null&&name.trim())p.name=name.trim().slice(0,80);}
   renderProfiles();renderQuestions();updateDashboard();persist();
 });
@@ -169,11 +175,33 @@ function defaultPartnerWeight() {
   const sharedWeight=w.ideals[0].weight;
   return sharedWeight>0&&w.ideals.every(p=>p.weight===sharedWeight)?sharedWeight:50;
 }
-$('addProfileBtn').addEventListener('click',()=>{
+let pendingPartner=null;
+function addPartner(partner) {
   const w=workspace();if(w.ideals.length>=30)return alert('Не более 30 партнеров.');
+  w.ideals.push(partner);w.selected=partner.id;change();
+}
+function offerPartner(partner) {
+  const key=partnerVectorKey(partner.answers,current().traits);
+  const original=workspace().ideals.find(p=>partnerVectorKey(p.answers,current().traits)===key);
+  if(!original)return addPartner(partner);
+  pendingPartner={partner,originalId:original.id,questionnaireId:current().id};
+  $('duplicatePartnerDescription').textContent=`Такой набор характеристик уже есть у «${original.name}». Можно выбрать его или создать копию для изменения характеристик. Совпадающие профили учитываются в расчёте один раз.`;
+  $('duplicatePartnerDialog').returnValue='cancel';
+  $('duplicatePartnerDialog').showModal();
+}
+$('duplicatePartnerDialog').addEventListener('close',()=>{
+  const pending=pendingPartner;pendingPartner=null;
+  if(!pending||pending.questionnaireId!==current().id)return;
+  if($('duplicatePartnerDialog').returnValue==='edit')return addPartner(pending.partner);
+  if($('duplicatePartnerDialog').returnValue!=='select')return;
+  workspace().selected=pending.originalId;
+  renderProfiles();renderQuestions();updateDashboard();persist();
+});
+$('addProfileBtn').addEventListener('click',()=>{
+  const w=workspace();
   const weight=defaultPartnerWeight();
   const previous=selectedIdeal();const p={id:uid(),name:`Партнер ${w.ideals.length+1}`,answers:clone(previous?.answers??w.own),weight};
-  w.ideals.push(p);w.selected=p.id;change();
+  offerPartner(p);
 });
 function applyPreset(name) {
   const q=current(),w=workspace(),traits=q.traits;
@@ -184,11 +212,8 @@ function applyPreset(name) {
     poles:()=>[allAnswers(traits,0),allAnswers(traits,1)]
   };
   if(!Object.hasOwn(presets,name)||!traits.some(t=>t.enabled && t.weight>0))return;
-  const count=name==='poles'?2:1;
-  if(w.ideals.length+count>30)return alert('Не более 30 партнеров.');
-  const weight=defaultPartnerWeight();
-  const partners=presets[name]().map((answers,i)=>({id:uid(),name:`Партнер ${w.ideals.length+i+1}`,answers,weight}));
-  w.ideals.push(...partners);w.selected=partners[0].id;
+  const partners=presets[name]().map((answers,i)=>({id:uid(),name:`Партнер ${i+1}`,answers,weight:50}));
+  w.ideals=partners;w.selected=partners[0].id;
   // Keep the preset button and its focus intact; selecting a partner does not navigate.
   renderProfiles();renderQuestions();updateDashboard();persist();
 }

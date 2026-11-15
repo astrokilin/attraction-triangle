@@ -79,6 +79,58 @@ test('zero total preference weight is invalid', () => {
   assert.equal(x.ok,false);
 });
 
+test('one or multiple exact copies leave the complete triangle result unchanged', () => {
+  const partners=[profile('f',female,27),profile('m',male,73)];
+  const before=structuredClone(partners),expected=evaluateTriangle(male,partners,traits);
+  const copy=profile('copy',structuredClone(female),27);
+  assert.deepEqual(evaluateTriangle(male,[partners[0],copy],traits),evaluateTriangle(male,[partners[0]],traits));
+  assert.deepEqual(evaluateTriangle(male,[...partners,copy],traits),expected);
+  assert.deepEqual(evaluateTriangle(male,[...partners,copy,{...copy,id:'copy_2'}],traits),expected);
+  assert.deepEqual(partners,before,'evaluation must not mutate or remove saved profiles');
+});
+
+test('duplicate weights never accumulate or replace the first explicit weight', () => {
+  const partners=[profile('f',female,20),profile('m',male,80)];
+  const expected=evaluateTriangle(male,partners,traits);
+  for (const weight of [0,1,50,100]) {
+    assert.deepEqual(evaluateTriangle(male,[...partners,profile('copy',female,weight)],traits),expected);
+  }
+  const disabled=[profile('f',female,0),profile('m',male,50)];
+  assert.deepEqual(evaluateTriangle(male,[...disabled,profile('copy',female,100)],traits),evaluateTriangle(male,disabled,traits),'copy must not reactivate a vector with an explicit zero weight');
+});
+
+test('genuinely different profiles and explicit unique weights still change the result', () => {
+  const partners=[profile('f',female,50),profile('m',male,50)];
+  const initial=evaluateTriangle(male,partners,traits);
+  const different={...male,genitals:0};
+  const added=evaluateTriangle(male,[...partners,profile('different',different,50)],traits);
+  assert.equal(added.ok,true);assert.equal(added.evaluated.length,3);
+  assert.notEqual(added.both,initial.both);
+  const reweighted=evaluateTriangle(male,[{...partners[0],weight:25},partners[1]],traits);
+  assert.notEqual(reweighted.both,initial.both);
+  assert.notEqual(reweighted.mu,initial.mu);
+});
+
+test('different complete vectors with equal scalar scores remain separate preferences', () => {
+  const ts=['a','b','c'].map(id=>({id,question:id,weight:1,enabled:true}));
+  const a={a:1,b:1,c:0},b={a:1,b:0,c:1},own={a:1,b:1,c:1};
+  approx(evaluateIdentity(a,ts).value,evaluateIdentity(b,ts).value);
+  const result=evaluateTriangle(own,[profile('a',a,20),profile('b',b,30),profile('f',{a:0,b:0,c:0},50)],ts);
+  assert.equal(result.evaluated.length,3);
+  assert.deepEqual(result.evaluated.map(p=>p.probability),[0.2,0.3,0.5]);
+  approx(result.mu,-1/3);approx(result.both,1/3);
+});
+
+test('disabled traits belong to the full vector and answer object key order does not matter', () => {
+  const ts=[{id:'active',question:'A',weight:1,enabled:true},{id:'disabled',question:'D',weight:5,enabled:false}];
+  const partners=[profile('a',{active:1,disabled:0},20),profile('b',{active:1,disabled:1},30),profile('f',{active:0,disabled:0},50)];
+  const result=evaluateTriangle({active:1,disabled:0},partners,ts);
+  assert.equal(result.evaluated.length,3);
+  assert.deepEqual(result.evaluated.map(p=>p.probability),[0.2,0.3,0.5]);
+  const reordered=profile('copy',{disabled:0,active:1},100);
+  assert.deepEqual(evaluateTriangle({active:1,disabled:0},[...partners,reordered],ts),result);
+});
+
 test('randomized weighted profiles remain in the triangle', () => {
   let seed = 123456789;
   const rng = () => { seed = (1664525 * seed + 1013904223) >>> 0; return seed / 4294967296; };
@@ -90,5 +142,6 @@ test('randomized weighted profiles remain in the triangle', () => {
     assert.ok(x.homo>=-1e-10 && x.hetero>=-1e-10 && x.both>=-1e-10);
     approx(x.homo+x.hetero+x.both,1);
     approx(x.homo-x.hetero,x.a*x.mu);
+    assert.deepEqual(evaluateTriangle(own,[...prefs,{...prefs[rep%prefs.length],id:'copy'}],traits),x);
   }
 });

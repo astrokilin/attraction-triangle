@@ -32,6 +32,8 @@ We **postulate**, rather than establish, that:
 
 Each person is represented in the binary trait space \(V=\{0,1\}^n\), with identity score \(I(x)\in[-1,1]\setminus\{0\}\). A person can select **multiple preferred vectors** \(y_j\), each with a normalized weight \(\pi_j\).
 
+Preferences are a **weighted set of unique complete binary vectors**, including answers to disabled traits when comparing profiles. The first stored profile supplies each vector's explicit weight, including zero; copies never add weight. All duplicate records and their original weights remain in saved projects and JSON exports, and can be edited into distinct profiles.
+
 $$
 \mu=\sum_j\pi_j I(y_j),\qquad
 r=\sum_j\pi_j|I(y_j)|,\qquad
