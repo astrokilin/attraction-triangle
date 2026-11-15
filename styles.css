@@ -81,6 +81,13 @@ a { color: var(--aqua); }
 .weight-row {display:flex;align-items:center;gap:10px;font-size:11px;color:#bdcbda;}
 .weight-row input { min-width:0; flex:1; accent-color:var(--aqua); }
 .weight-row output { font-variant-numeric:tabular-nums; min-width:40px;text-align:right;color:var(--text); }
+.partner-settings {margin-top:14px;}
+.partner-settings > summary {justify-content:flex-start;}
+.partner-settings > .helper {margin-top:12px;}
+.partner-weight-list {display:grid;gap:14px;margin-top:16px;}
+.partner-weight-heading {display:flex;align-items:start;gap:10px;justify-content:space-between;font-size:11px;color:#bdcbda;margin-bottom:7px;}
+.partner-weight-heading label {min-width:0;overflow-wrap:anywhere;}
+.partner-weight-heading > span {flex-shrink:0;color:var(--muted);font-variant-numeric:tabular-nums;}
 .profile-actions {display:flex;justify-content:flex-end;margin-top:8px;gap:10px;}
 .text-btn {border:0;background:transparent;color:#8cbea9;font-size:11px;padding:0;text-decoration:underline;text-underline-offset:3px;}
 .text-btn:hover {color:#d5fff5;}

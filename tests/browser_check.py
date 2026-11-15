@@ -29,6 +29,67 @@ def load_app(page):
 def scroll_positions(page):
     return page.evaluate('({page:window.scrollY,list:document.getElementById("questionList").scrollTop})')
 
+def check_partner_weights(page):
+    settings=page.locator('#partnerSettings')
+    summary=settings.locator('summary')
+    sliders=settings.locator('input[data-weight-id]')
+    weights=lambda:page.evaluate('workspace().ideals.map(p=>p.weight)')
+    state=lambda:page.evaluate('JSON.parse(localStorage.getItem("representation-triangle-ru-v3")).project')
+    assert summary.inner_text()=='Дополнительные настройки'
+    assert not settings.evaluate('(el)=>el.open')
+    assert not sliders.first.is_visible()
+    assert page.locator('#profileList input[type="range"]').count()==0
+    assert 'веса предпочтений' not in page.locator('#profileList').inner_text()
+    page.locator('#addProfileBtn').click()
+    assert weights()==[50,50,50]
+    probabilities=page.evaluate('evaluateTriangle(workspace().own,workspace().ideals,current().traits).evaluated.map(p=>p.probability)')
+    assert probabilities==[1/3]*3, 'new default partners must have equal effective weights'
+    summary.click()
+    assert sliders.count()==3 and sliders.first.is_visible()
+    before=page.locator('#bothValue').inner_text()
+    sliders.first.press('End')
+    assert weights()==[100,50,50]
+    assert page.locator('#bothValue').inner_text()=='100.0%'
+    assert page.locator('#bothValue').inner_text()!=before, 'advanced weights must update the triangle live'
+    assert settings.locator('[data-weight-share]').all_text_contents()==['50.0','25.0','25.0']
+    assert sliders.first.evaluate('(el)=>el===document.activeElement'), 'weight adjustment must retain slider focus'
+    sliders.nth(1).press('Home')
+    assert weights()==[100,0,50]
+    saved=state()
+    summary.click()
+    assert not sliders.first.is_visible()
+    assert state()==saved, 'collapsing settings must not change saved weights'
+    summary.click()
+    assert weights()==[100,0,50]
+    page.locator('input[data-role="own"]').first.locator('..').click()
+    assert settings.evaluate('(el)=>el.open'), 'questionnaire updates must preserve the open section'
+    saved=state()
+    page.reload()
+    assert not settings.evaluate('(el)=>el.open'), 'advanced settings start collapsed on page load'
+    assert state()==saved and weights()==[100,0,50], 'custom and zero weights must survive reload'
+    page.locator('#addProfileBtn').click()
+    assert weights()==[100,0,50,50], 'adding must preserve existing custom weights'
+    saved=state()
+    with page.expect_download() as dl:
+        page.locator('#exportBtn').click()
+    export_path=artifacts/f'weights-{page.viewport_size["width"]}.json'
+    dl.value.save_as(str(export_path))
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.locator('#importFile').set_input_files(str(export_path))
+    page.wait_for_function('document.querySelectorAll("#profileList .profile-card").length===4')
+    assert state()==saved, 'JSON round trip must preserve custom weights'
+    assert not settings.evaluate('(el)=>el.open')
+    summary.click()
+    assert [slider.input_value() for slider in sliders.all()]==['100','0','50','50']
+    assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth+2'), 'advanced settings must fit the viewport'
+    page.locator('[data-preset="masculine"]').click()
+    page.locator('#addProfileBtn').click()
+    assert weights()==[100,100], 'adding to a single-partner preset must keep equal significance'
+    page.once('dialog',lambda d:d.accept())
+    page.locator('#resetBtn').click()
+    page.reload()
+
 def check_answer_scrolling(page):
     questions=page.locator('#questionList')
     page.evaluate('''()=>{
@@ -73,6 +134,7 @@ with sync_playwright() as p:
     errors=[]
     page.on('pageerror',lambda exc:errors.append(str(exc)))
     load_app(page)
+    check_partner_weights(page)
     assert page.locator('html').get_attribute('lang')=='ru'
     assert page.locator('#questionnaireStatus').inner_text().startswith('16 вопросов')
     assert page.locator('.question').count()==16
@@ -162,9 +224,11 @@ with sync_playwright() as p:
     assert not errors,errors
     phone=browser.new_page(viewport={'width':390,'height':844},device_scale_factor=1)
     load_app(phone)
+    check_partner_weights(phone)
     check_answer_scrolling(phone)
     phone.screenshot(path=str(artifacts/'mobile.png'),full_page=True)
     assert phone.evaluate('document.documentElement.scrollWidth <= window.innerWidth + 2'), 'horizontal overflow on mobile'
-    print('BROWSER SMOKE PASS: desktop/mobile answer and keyboard scrolling, wheel, navigation, partner switching/names, saved data, JSON round trip, questionnaire copy/edit/add/switch/blank, responsive layouts')
+    assert not errors,errors
+    print('BROWSER SMOKE PASS: advanced weights/equal defaults/live triangle/persistence/JSON on desktop and mobile, answer and keyboard scrolling, wheel, navigation, partner switching/names, questionnaire editing, responsive layouts')
     print(f'Browser artifacts: {artifacts}')
     browser.close()

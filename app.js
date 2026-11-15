@@ -31,19 +31,30 @@ function renderQuestionnaireSelect() {
   $('deleteQuestionnaireBtn').disabled=q.builtin;
 }
 function renderProfiles() {
-  const w=workspace(), total=w.ideals.reduce((sum,p)=>sum+Math.max(0,Number(p.weight)),0);
+  const w=workspace();
   $('profileList').innerHTML=w.ideals.map(p=>{
     const score=evaluateIdentity(p.answers,current().traits);
-    const share=total>0? (Number(p.weight)/total*100).toFixed(1):'0.0';
     return `<article class="profile-card ${p.id===w.selected?'selected':''}">
       <div class="profile-top"><button type="button" class="profile-select" data-action="select" data-id="${escapeHtml(p.id)}" title="Редактировать характеристики партнера">${escapeHtml(p.name)}</button>
       <button type="button" class="icon-btn" data-action="remove" data-id="${escapeHtml(p.id)}" aria-label="Удалить ${escapeHtml(p.name)}" ${w.ideals.length===1?'disabled':''}>×</button></div>
-      <div class="profile-sub">${score.ok?`Профиль партнера: ${fixed(score.value)}`:'Профиль партнера не определён (нарушение правила модели)'} · ${share}% веса предпочтений</div>
-      <div class="weight-row"><label for="w_${escapeHtml(p.id)}">Вес</label><input id="w_${escapeHtml(p.id)}" aria-label="Вес предпочтения партнера ${escapeHtml(p.name)}" type="range" min="0" max="100" step="1" value="${p.weight}" data-weight-id="${escapeHtml(p.id)}"/><output data-weight-output="${escapeHtml(p.id)}">${p.weight}</output></div>
+      <div class="profile-sub">${score.ok?`Профиль партнера: ${fixed(score.value)}`:'Профиль партнера не определён (нарушение правила модели)'}</div>
       <div class="profile-actions"><button type="button" class="text-btn" data-action="rename" data-id="${escapeHtml(p.id)}">Переименовать</button><button type="button" class="text-btn" data-action="duplicate" data-id="${escapeHtml(p.id)}">Копировать</button></div>
     </article>`;
   }).join('');
+  $('partnerWeightList').innerHTML=w.ideals.map(p=>`
+    <div class="partner-weight">
+      <div class="partner-weight-heading"><label for="w_${escapeHtml(p.id)}">${escapeHtml(p.name)}</label><span><span data-weight-share="${escapeHtml(p.id)}"></span>%</span></div>
+      <div class="weight-row"><input id="w_${escapeHtml(p.id)}" aria-label="Вес предпочтения партнера ${escapeHtml(p.name)}" type="range" min="0" max="100" step="1" value="${p.weight}" data-weight-id="${escapeHtml(p.id)}"/><output for="w_${escapeHtml(p.id)}" data-weight-output="${escapeHtml(p.id)}">${p.weight}</output></div>
+    </div>`).join('');
+  updatePartnerWeightOutputs();
   $('currentProfileName').textContent=selectedIdeal()?.name||'—';
+}
+function updatePartnerWeightOutputs() {
+  const partners=workspace().ideals,total=partners.reduce((sum,p)=>sum+Math.max(0,Number(p.weight)),0);
+  for (const p of partners) {
+    $('partnerWeightList').querySelector(`[data-weight-output="${p.id}"]`).textContent=String(p.weight);
+    $('partnerWeightList').querySelector(`[data-weight-share="${p.id}"]`).textContent=total>0?(Number(p.weight)/total*100).toFixed(1):'0.0';
+  }
 }
 function renderQuestions() {
   const q=current(), w=q.workspace, ideal=selectedIdeal();
@@ -133,15 +144,13 @@ $('questionList').addEventListener('change',event=>{
   const target=input.dataset.role==='own'?workspace().own:selectedIdeal().answers;
   target[input.dataset.trait]=Number(input.value);renderProfiles();updateDashboard();persist();
 });
-$('profileList').addEventListener('input',event=>{
+$('partnerWeightList').addEventListener('input',event=>{
   const input=event.target.closest('input[data-weight-id]');if(!input)return;
   const p=workspace().ideals.find(x=>x.id===input.dataset.weightId);if(!p)return;
   p.weight=Number(input.value);
-  const output=[...$('profileList').querySelectorAll('output[data-weight-output]')].find(el=>el.dataset.weightOutput===p.id);
-  if(output)output.textContent=String(p.weight);
+  updatePartnerWeightOutputs();
   updateDashboard();persist();
 });
-$('profileList').addEventListener('change',event=>{if(event.target.matches('input[data-weight-id]')){renderProfiles();persist();}});
 $('profileList').addEventListener('click',event=>{
   const btn=event.target.closest('button[data-action]');if(!btn)return;
   const w=workspace(),p=w.ideals.find(item=>item.id===btn.dataset.id);if(!p)return;
@@ -153,7 +162,9 @@ $('profileList').addEventListener('click',event=>{
 });
 $('addProfileBtn').addEventListener('click',()=>{
   const w=workspace();if(w.ideals.length>=30)return alert('Не более 30 партнеров.');
-  const previous=selectedIdeal();const p={id:uid(),name:`Партнер ${w.ideals.length+1}`,answers:clone(previous?.answers??w.own),weight:50};
+  const sharedWeight=w.ideals[0].weight;
+  const weight=sharedWeight>0&&w.ideals.every(p=>p.weight===sharedWeight)?sharedWeight:50;
+  const previous=selectedIdeal();const p={id:uid(),name:`Партнер ${w.ideals.length+1}`,answers:clone(previous?.answers??w.own),weight};
   w.ideals.push(p);w.selected=p.id;change();
 });
 function applyPreset(name) {

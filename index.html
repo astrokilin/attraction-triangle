@@ -96,7 +96,12 @@
         <div class="panel-title"><span class="section-index">04</span><div><h2>Партнеры</h2><p>Для каждого партнера задайте полный набор характеристик</p></div></div>
         <div id="profileList" class="profile-list"></div>
         <button type="button" id="addProfileBtn" class="button add-button">＋ Добавить партнера</button>
-        <p class="helper">Веса относительные: 20 и 40 означают те же пропорции, что 1 и 2. Нулевой вес исключает партнера из расчета.</p>
+        <details id="partnerSettings" class="partner-settings">
+          <summary>Дополнительные настройки</summary>
+          <p class="helper">Вес определяет, насколько сильно выбранный партнёр влияет на итоговый результат относительно остальных партнёров. По умолчанию все партнёры имеют одинаковую значимость.</p>
+          <div id="partnerWeightList" class="partner-weight-list"></div>
+          <p class="helper">Веса относительные: 20 и 40 означают те же пропорции, что 1 и 2. Нулевой вес исключает партнера из расчета.</p>
+        </details>
       </div>
       <div class="panel questions-panel" id="questions">
         <div class="panel-title"><span class="section-index">05</span><div><h2>Мои характеристики и выбранного партнера</h2><p>Слева — мои характеристики, справа — выбранного партнера</p></div></div>
