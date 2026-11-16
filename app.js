@@ -1,4 +1,4 @@
-import { groupOrder, BEHAVIOR_GROUP } from './traits.mjs';
+import { groupOrder } from './traits.mjs';
 import { evaluateIdentity, evaluateTriangle, allAnswers, nearestToZero, partnerVectorKey, uniquePartnerProfiles } from './model.mjs';
 import { validateNonzeroIdentity } from './weight_validation.mjs';
 import { newProject, makeQuestionnaire, activeQuestionnaire, fillMissingAnswers, importProject } from './questionnaires.mjs';
@@ -32,7 +32,6 @@ function renderQuestionnaireSelect() {
   $('questionnaireStatus').textContent = `${questionCount(q.traits.length)}, ${q.traits.filter(t=>t.enabled).length} активных · ${q.builtin?'Вопросы исходной анкеты: только чтение. Для изменения вопросов и их весов создайте копию.':'Пользовательская анкета: вопросы и веса можно редактировать. Автосохранение в этом браузере.'}`;
   $('renameQuestionnaireBtn').disabled=q.builtin;
   $('deleteQuestionnaireBtn').disabled=q.builtin;
-  $('migrationNotice').hidden=q.migratedFrom!==16;
   document.querySelectorAll('button[data-preset]').forEach(btn=>{
     btn.disabled=!q.traits.some(t=>t.enabled && t.weight>0);
     btn.title=btn.disabled?'Добавьте или включите хотя бы один вопрос в анкете.':'';
@@ -76,7 +75,7 @@ function renderQuestions() {
   const groups=groupOrder.filter(group=>active.some(t=>t.group===group));
   $('questionList').innerHTML=groups.map(group=>{
     const items=active.filter(t=>t.group===group);
-    return `<section class="question-group ${group===BEHAVIOR_GROUP?'behavior-group':''}"><h3>${escapeHtml(group)}</h3>${group===BEHAVIOR_GROUP?'<p class="helper behavior-note">Условные культурные модели; не определяют гендерную идентичность или ориентацию человека.</p>':''}${items.map(t=>{
+    return `<section class="question-group" data-question-group="${escapeHtml(group)}"><h3>${escapeHtml(group)}</h3>${items.map(t=>{
       const fields=(role,answers)=>`<div class="answer-group ${role==='ideal'?'ideal':''}"><span class="mini-header">${role==='own'?'Я':'ПАРТНЕР'}</span><div class="pair">${[0,1].map(value=>`<label class="choice"><input type="radio" name="q_${role}_${escapeHtml(t.id)}" data-trait="${escapeHtml(t.id)}" data-role="${role}" value="${value}" ${answers[t.id]===value?'checked':''}/><span>${escapeHtml(value===0?t.female:t.male)}</span></label>`).join('')}</div></div>`;
       return `<div class="question"><div class="question-head"><strong>${escapeHtml(t.question)}</strong><small title="${escapeHtml(t.note)}">вес ${Number(t.weight).toFixed(2)} ⓘ</small></div><div class="answer-grid">${fields('own',w.own)}${fields('ideal',ideal.answers)}</div></div>`;
     }).join('')}</section>`;

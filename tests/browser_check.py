@@ -31,7 +31,7 @@ def scroll_positions(page):
     return page.evaluate('({page:window.scrollY,list:document.getElementById("questionList").scrollTop})')
 
 def check_weight_validation(page):
-    behavior=page.locator('.behavior-group')
+    behavior=page.locator('[data-question-group="Романтическое и сексуальное поведение"]')
     assert behavior.locator('h3').text_content()=='Романтическое и сексуальное поведение'
     assert behavior.locator('.question').count()==6
     assert not page.locator('#weightAxiomWarning').is_visible()
@@ -63,7 +63,7 @@ def check_saved_migration(page):
     page.evaluate('(raw)=>localStorage.setItem("representation-triangle-ru-v3",JSON.stringify(raw))',legacy)
     page.reload()
     assert page.locator('.question').count()==23
-    assert page.locator('#migrationNotice').is_visible()
+    assert page.locator('#migrationNotice').count()==0
     old=legacy['project']['questionnaires'][0]['workspace']
     current=page.evaluate('workspace()')
     assert all(current['own'][key]==value for key,value in old['own'].items())

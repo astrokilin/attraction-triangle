@@ -320,7 +320,8 @@ class BrowserCases:
         custom=copy.deepcopy(old['project']['questionnaires'][0]);custom.update(id='old_custom',builtin=False,name='Старая пользовательская копия',behaviorContribution=.3)
         custom['traits'][0]['weight']=7.123456789;old['project']['questionnaires'].append(custom)
         self.page.locator('#importFile').set_input_files({'name':'old-v3.json','mimeType':'application/json','buffer':json.dumps(old).encode()})
-        expect(self.page.locator('#migrationNotice')).to_be_visible()
+        expect(self.page.locator('#questionnaireSelect')).to_have_value('default')
+        expect(self.page.locator('#migrationNotice')).to_have_count(0)
         q=self.questionnaire();self.assertEqual(len(q['traits']),23)
         for key,value in old['project']['questionnaires'][0]['workspace']['own'].items():self.assertEqual(q['workspace']['own'][key],value)
         self.assertEqual(self.state()['questionnaires'][1],custom)
@@ -382,6 +383,33 @@ class BrowserCases:
             self.page.wait_for_function('document.getElementById("importFile").value===""')
             self.assertTrue(messages and 'Ошибка импорта' in messages[0])
             self.assertEqual(self.state(),saved,'rejected JSON must not overwrite existing data')
+
+    def test_10_keyboard_focus_does_not_frame_the_questionnaire(self):
+        self.preset('masculine')
+        self.page.locator('#partnerSettings summary').press('Tab')
+        self.page.wait_for_timeout(600)
+        focus=self.page.evaluate('''()=>{const a=document.activeElement,l=document.getElementById('questionList');
+          return {role:a.dataset.role,trait:a.dataset.trait,container:l.matches(':focus-visible'),outline:getComputedStyle(l).outlineWidth,
+            answer:a.closest('.choice')?getComputedStyle(a.closest('.choice')).outlineWidth:null};}''')
+        self.assertEqual(focus['role'],'own');self.assertEqual(focus['trait'],'genitals')
+        self.assertFalse(focus['container']);self.assertEqual(focus['outline'],'0px')
+        self.assertEqual(focus['answer'],'2px','keyboard users need a visible answer focus indicator')
+        self.place_questions()
+        self.page.locator('#questionList').evaluate('(el)=>el.scrollTop=0')
+        self.page.wait_for_timeout(150)
+        before=self.scroll_positions()
+        self.page.keyboard.press('PageDown');self.page.wait_for_timeout(350)
+        after=self.scroll_positions()
+        self.assertEqual(after['page'],before['page']);self.assertGreater(after['list'],before['list'])
+        self.page.keyboard.press('Tab')
+        self.page.wait_for_timeout(150)
+        focus=self.page.evaluate('({role:document.activeElement.dataset.role,trait:document.activeElement.dataset.trait})')
+        self.assertEqual(focus,{'role':'ideal','trait':'genitals'})
+        self.assertEqual(self.scroll_positions()['page'],before['page'])
+        before=self.scroll_positions()
+        self.page.keyboard.press('ArrowLeft');self.page.wait_for_timeout(150)
+        expect(self.page.locator('input[data-role="ideal"][data-trait="genitals"][value="0"]')).to_be_checked()
+        self.assertEqual(self.scroll_positions(),before);self.check_result()
 
 class DesktopTests(BrowserCases,unittest.TestCase):
     viewport={'width':1440,'height':1000}
